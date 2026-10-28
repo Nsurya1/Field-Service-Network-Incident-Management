@@ -1,0 +1,160 @@
+Your project: Field Service & Network Incident Management System
+
+
+
+
+
+
+
+afrozahmad.com
+
+
+The idea is to build a system that a company like a telecom provider, network services company, or field support organization could use to manage network failures, field engineers, and incident resolution.
+For example, a router fails at a customer site. The system records the incident, prioritizes it, assigns an engineer, tracks progress, records the resolution, and provides operational reports.
+This is more meaningful than a basic job tracker because it gives us real engineering problems to solve: permissions, state transitions, data consistency, assignment workflows, API security, monitoring, and deployment.
+1. The technology stack we planned
+Layer	Technology
+Programming language	Java 21
+Backend	Spring Boot
+API design	REST APIs
+Database	PostgreSQL
+Persistence	Spring Data JPA, Hibernate
+Security	Spring Security, JWT, role-based access control
+Frontend	React, Vite, Tailwind CSS
+Caching	Redis
+Asynchronous events	Apache Kafka
+Testing	JUnit 5, Mockito, Spring Boot Test, JaCoCo
+Containerization	Docker, Docker Compose
+CI/CD	GitHub Actions
+Deployment	AWS, with a production-style deployment configuration
+Web server / reverse proxy	Nginx
+We planned to begin with a modular monolith, not microservices. That means one deployable backend organized into clear business modules. It is easier to build, debug, test, and deploy as a fresher, while still teaching you production-grade architecture.
+Not every technology needs to be introduced immediately. We'll add Redis, Kafka, security, and deployment when the core workflow is stable and we can explain why each is needed.
+2. The functionality we planned
+
+
+
+
+
+
+
+
+
+Module 1 — Incident management
+- Create, retrieve, filter, and paginate incidents.
+- Priorities: LOW, MEDIUM, HIGH, CRITICAL.
+- Track incident lifecycle and status transitions.
+- Capture location, description, timestamps, and resolution details.
+
+
+
+
+
+
+
+
+
+
+
+
+Module 2 — Engineer and assignment management
+- Register engineers and manage their details.
+- Assign incidents to engineers.
+- Prevent duplicate email registrations.
+- Later, introduce workload and availability-aware assignment.
+
+
+
+
+
+
+
+
+
+
+
+
+Module 3 — Security and permissions
+- JWT authentication and Spring Security.
+- Roles: ADMIN, MANAGER, ENGINEER, VIEWER.
+- Restrict operations according to the user's role.
+- Validate inputs and return consistent error responses.
+
+
+
+
+
+
+
+
+
+
+
+
+Module 4 — Operational intelligence
+- Incident dashboards and reports.
+- Resolution time and mean time to resolution (MTTR).
+- SLA tracking and overdue incident alerts.
+- Audit logs and incident history.
+
+
+
+
+
+
+
+
+
+
+
+
+Module 5 — Production engineering
+- Automated unit and integration tests.
+- Dockerized application and database.
+- GitHub Actions CI/CD.
+- Centralized logging, health checks, configuration management, and deployment.
+- Redis caching and Kafka-based asynchronous processing where useful.
+
+
+
+We also discussed a second portfolio project, Production Change & Deployment Risk Management System, with risk scoring, dependency impact analysis, approval workflows, rollback tracking, audit logs, and correlation between deployments and incidents. That remains a separate project, not a feature we should randomly mix into Project 1. 
+3. What we have actually completed
+Here is the distinction between implemented features and the future roadmap.
+Implemented and tested so far
+
+- Spring Boot backend and PostgreSQL connection.
+- Health and database-check endpoints.
+- Incident entity, repository, service, and controller.
+- Incident creation and retrieval.
+- Status and priority filtering, pagination.
+- Incident status updates.
+- Engineer registration and retrieval.
+- Duplicate engineer email handling.
+- Incident assignment to an engineer.
+- DTO-based incident responses.
+- Centralized exception handling.
+- Unit tests for incident and engineer services.
+- JaCoCo coverage reporting.
+- Tests for the global exception handler.
+  
+  Still part of the planned roadmap
+- Complete, verified API integration tests.
+- Stronger validation and business-rule tests.
+- JWT authentication and role-based authorization.
+- Resolution notes and a complete incident lifecycle.
+- Audit history, SLA tracking, and reports.
+- React frontend.
+- Docker, CI/CD, and deployment.
+- Redis and Kafka integration when justified.
+
+Your latest coverage figures were 52% overall, 92% for the incident package, and 3% for common.exception before adding its tests. The global exception-handler tests now pass. We should regenerate the report to see the updated numbers before deciding what needs attention.
+4. How we'll make it genuinely production-ready
+A production-ready project isn't defined by how many technologies it uses or whether JaCoCo says 80%. It is defined by whether the system behaves correctly when real users, invalid requests, concurrent updates, and failures occur.
+We'll work through these gates:
+1. Reliable business logic — validate incident transitions, assignment rules, missing records, duplicate data, and edge cases.
+2. Secure APIs — authentication, role-based permissions, secret management, and appropriate access restrictions.
+3. Data integrity — database constraints, transaction boundaries, concurrent update handling, and reliable error responses.
+4. Quality assurance — unit tests, controller/API tests, PostgreSQL integration tests, and useful coverage reports.
+5. Operational readiness — structured logging, health checks, Docker, environment-specific configuration, and CI/CD.
+6. Demonstrable delivery — working frontend, API documentation, architecture diagram, seeded demo data, deployment instructions, and a clear README.
+We'll build these in order and test each stage. We won't claim a feature on your resume until it actually works.

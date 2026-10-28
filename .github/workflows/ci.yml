@@ -1,0 +1,59 @@
+name: FieldService CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  backend-test:
+    name: Backend Tests & Coverage Verification (Testcontainers & JaCoCo)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Grant Execute Permission to Maven Wrapper
+        run: chmod +x ./backend/mvnw
+
+      - name: Run Backend Tests and Enforce JaCoCo Coverage Threshold (>=85%)
+        working-directory: ./backend
+        run: ./mvnw clean verify
+
+      - name: Archive JaCoCo Code Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-coverage-report
+          path: backend/target/site/jacoco/
+
+  frontend-build:
+    name: Frontend Build & Asset Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Build Vite Production Bundle
+        working-directory: ./frontend
+        run: npm run build
