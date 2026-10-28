@@ -99,7 +99,8 @@ public class IncidentService {
             );
         }
 
-        Engineer engineer = engineerService.getEngineerById(engineerId);
+        // Pessimistic write lock to serialize concurrent assignments to the same engineer and protect workload cap
+        Engineer engineer = engineerService.getEngineerByIdForUpdate(engineerId);
 
         boolean isAlreadyAssignedToThisEngineer = incident.getAssignedEngineer() != null
                 && engineerId.equals(incident.getAssignedEngineer().getId());
@@ -120,7 +121,9 @@ public class IncidentService {
         }
 
         incident.setAssignedEngineer(engineer);
-        incident.setStatus(IncidentStatus.ASSIGNED);
+        if (incident.getStatus() == IncidentStatus.OPEN) {
+            incident.setStatus(IncidentStatus.ASSIGNED);
+        }
 
         Incident savedIncident = incidentRepository.save(incident);
 
@@ -128,6 +131,37 @@ public class IncidentService {
                 savedIncident,
                 "ASSIGNED",
                 "Incident assigned to engineer: " + engineer.getName()
+        ));
+
+        return savedIncident;
+    }
+
+    @Transactional
+    public Incident unassignIncident(Long incidentId) {
+        Incident incident = getIncidentById(incidentId);
+
+        if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.RESOLVED) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot unassign engineer from a " + incident.getStatus() + " incident"
+            );
+        }
+
+        Engineer previousEngineer = incident.getAssignedEngineer();
+        incident.setAssignedEngineer(null);
+
+        if (incident.getStatus() == IncidentStatus.ASSIGNED || incident.getStatus() == IncidentStatus.IN_PROGRESS) {
+            incident.setStatus(IncidentStatus.OPEN);
+        }
+
+        Incident savedIncident = incidentRepository.save(incident);
+
+        incidentHistoryRepository.save(new IncidentHistory(
+                savedIncident,
+                "UNASSIGNED",
+                previousEngineer != null
+                        ? "Incident unassigned from engineer: " + previousEngineer.getName()
+                        : "Incident unassigned"
         ));
 
         return savedIncident;
@@ -253,6 +287,14 @@ public class IncidentService {
                     HttpStatus.BAD_REQUEST,
                     String.format("Invalid status transition from %s to %s",
                             incident.getStatus(), newStatus)
+            );
+        }
+
+        if ((newStatus == IncidentStatus.IN_PROGRESS || newStatus == IncidentStatus.RESOLVED)
+                && incident.getAssignedEngineer() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Cannot transition to " + newStatus + " without an assigned engineer"
             );
         }
 

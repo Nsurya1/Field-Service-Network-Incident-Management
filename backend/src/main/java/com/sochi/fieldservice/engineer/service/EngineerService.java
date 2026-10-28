@@ -1,12 +1,11 @@
-
 package com.sochi.fieldservice.engineer.service;
 
 import com.sochi.fieldservice.engineer.dto.CreateEngineerRequest;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.repository.EngineerRepository;
-
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -45,6 +44,15 @@ public class EngineerService {
 
     public Engineer getEngineerById(Long id) {
         return engineerRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Engineer not found with ID: " + id
+                ));
+    }
+
+    @Transactional
+    public Engineer getEngineerByIdForUpdate(Long id) {
+        return engineerRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Engineer not found with ID: " + id

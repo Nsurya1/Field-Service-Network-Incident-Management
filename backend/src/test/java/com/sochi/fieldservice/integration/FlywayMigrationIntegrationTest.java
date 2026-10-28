@@ -25,12 +25,12 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("Verify Flyway migrations V1, V2, and V3 are applied and registered in test database")
+    @DisplayName("Verify Flyway migrations V1, V2, V3, and V4 are applied and registered in test database")
     void shouldApplyAndTrackFlywayMigrations() {
         assertNotNull(flyway, "Flyway bean must be initialized by Spring Boot");
 
         MigrationInfo[] applied = flyway.info().applied();
-        assertTrue(applied.length >= 3, "Migrations V1, V2, and V3 must be applied");
+        assertTrue(applied.length >= 4, "Migrations V1, V2, V3, and V4 must be applied");
 
         List<String> versions = Arrays.stream(applied)
                 .map(info -> info.getVersion().getVersion())
@@ -39,6 +39,7 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
         assertTrue(versions.contains("1"), "Migration V1 baseline must be recorded");
         assertTrue(versions.contains("2"), "Migration V2 timestamp extension must be recorded");
         assertTrue(versions.contains("3"), "Migration V3 link user to engineer must be recorded");
+        assertTrue(versions.contains("4"), "Migration V4 version and locking must be recorded");
 
         // Verify all applied migrations have status SUCCESS
         for (MigrationInfo info : applied) {
@@ -51,7 +52,7 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
                 Integer.class
         );
         assertNotNull(count);
-        assertTrue(count >= 3, "flyway_schema_history must have at least 3 successful records");
+        assertTrue(count >= 4, "flyway_schema_history must have at least 4 successful records");
 
         // Verify engineer_id column exists on users table
         Integer colCount = jdbcTemplate.queryForObject(
@@ -60,5 +61,13 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
         );
         assertNotNull(colCount);
         assertEquals(1, colCount, "users table must contain engineer_id column");
+
+        // Verify version column exists on incident table
+        Integer versionColCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'incident' AND column_name = 'version'",
+                Integer.class
+        );
+        assertNotNull(versionColCount);
+        assertEquals(1, versionColCount, "incident table must contain version column");
     }
 }

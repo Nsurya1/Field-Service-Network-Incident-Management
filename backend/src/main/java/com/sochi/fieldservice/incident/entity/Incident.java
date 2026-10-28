@@ -49,6 +49,9 @@ public class Incident {
     @JoinColumn(name = "assigned_engineer_id")
     private Engineer assignedEngineer;
 
+    @Version
+    private Long version;
+
     public Incident() {
     }
 
@@ -211,5 +214,13 @@ public class Incident {
 
     public void setAssignedEngineer(Engineer assignedEngineer) {
         this.assignedEngineer = assignedEngineer;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

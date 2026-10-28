@@ -346,4 +346,22 @@ class IncidentControllerTest {
                         .param("page", "-1"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void shouldUnassignIncident() throws Exception {
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.OPEN);
+
+        when(incidentService.unassignIncident(1L)).thenReturn(incident);
+
+        mockMvc.perform(patch("/api/v1/incidents/1/unassign"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.assignedEngineerId").doesNotExist());
+
+        verify(incidentService).unassignIncident(1L);
+    }
 }

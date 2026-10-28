@@ -144,4 +144,9 @@ public class IncidentController {
                 incidentService.assignIncident(
                         id, request.getEngineerId()));
     }
+
+    @PatchMapping("/{id}/unassign")
+    public IncidentResponse unassignIncident(@PathVariable Long id) {
+        return new IncidentResponse(incidentService.unassignIncident(id));
+    }
 }

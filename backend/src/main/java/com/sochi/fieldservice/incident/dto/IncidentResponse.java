@@ -19,6 +19,7 @@ public class IncidentResponse {
     private String assignedEngineerName;
     private LocalDateTime slaDeadline;
     private boolean slaBreached;
+    private Long version;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime resolvedAt;
@@ -33,6 +34,7 @@ public class IncidentResponse {
         this.location = incident.getLocation();
         this.slaDeadline = incident.getSlaDeadline();
         this.slaBreached = incident.isSlaBreached();
+        this.version = incident.getVersion();
         this.createdAt = incident.getCreatedAt();
         this.updatedAt = incident.getUpdatedAt();
         this.resolvedAt = incident.getResolvedAt();
@@ -84,6 +86,10 @@ public class IncidentResponse {
 
     public boolean isSlaBreached() {
         return slaBreached;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public LocalDateTime getCreatedAt() {

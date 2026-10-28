@@ -49,13 +49,16 @@ A robust, enterprise-grade field service and network incident dispatch managemen
 
 ## ✨ Key Features & Domain Business Rules
 
-### 1. Incident Lifecycle State Machine
-Prevents invalid transitions through domain-encapsulated logic (`canTransitionTo`):
-- `OPEN` $\rightarrow$ `ASSIGNED`, `IN_PROGRESS`, `CLOSED`
-- `ASSIGNED` $\rightarrow$ `IN_PROGRESS`, `OPEN` (unassign), `CLOSED`
+### 1. Incident Lifecycle State Machine & Assignment Hardening
+Prevents invalid transitions and unassigned progression through domain-encapsulated logic (`canTransitionTo`) and state guardrails:
+- `OPEN` $\rightarrow$ `ASSIGNED`, `IN_PROGRESS` (requires assigned engineer), `CLOSED`
+- `ASSIGNED` $\rightarrow$ `IN_PROGRESS`, `OPEN` (via unassign), `CLOSED`
 - `IN_PROGRESS` $\rightarrow$ `RESOLVED`, `ASSIGNED`
 - `RESOLVED` $\rightarrow$ `CLOSED`, `IN_PROGRESS` (re-open)
 - `CLOSED` $\rightarrow$ Terminal state; cannot be modified or assigned.
+- **Unassigned Guardrail:** Transitions to `IN_PROGRESS` and `RESOLVED` are strictly blocked (HTTP 400 Bad Request) if no field engineer is assigned to the incident.
+- **Assignment Status Preservation:** Assigning an incident only advances status to `ASSIGNED` from `OPEN`; reassigning an `IN_PROGRESS` or `RESOLVED` ticket preserves its operational status rather than regressing.
+- **Unassign Support (`PATCH /api/v1/incidents/{id}/unassign`):** Clears the assigned engineer, resets active incidents (`ASSIGNED` or `IN_PROGRESS`) back to `OPEN`, and appends an immutable `UNASSIGNED` audit history event.
 
 ### 2. SLA Deadlines & Real-Time Breach Tracking
 Each priority level triggers an automatic Service Level Agreement (SLA) target deadline upon creation:
@@ -66,9 +69,11 @@ Each priority level triggers an automatic Service Level Agreement (SLA) target d
 
 If an active ticket exceeds its deadline without resolution, `isSlaBreached()` evaluates to `true` and the UI marks the ticket with a real-time breach alert.
 
-### 3. Technician Workload Capacity Guardrails
-Prevents engineer burnout and dispatch bottlenecks:
+### 3. Technician Workload Capacity & Concurrency Protection
+Prevents engineer burnout and dispatch bottlenecks with strict concurrency control:
 - Each field technician is capped at a maximum of **3 active incidents** (`ASSIGNED` or `IN_PROGRESS`) concurrently.
+- **Pessimistic Write Locking (`SELECT ... FOR UPDATE`):** When checking technician capacity during assignment, `EngineerRepository.findByIdForUpdate()` serializes concurrent assignment transactions against the engineer row, eliminating race conditions where simultaneous requests could breach the workload cap.
+- **Optimistic Locking (`@Version`):** `Incident` entities use a JPA `@Version` column (`version BIGINT NOT NULL DEFAULT 0`) to detect and reject concurrent lost-update conflicts (`OptimisticLockingFailureException`).
 - Attempting to assign an engineer at capacity immediately rejects with **HTTP 409 Conflict**.
 
 ### 4. Immutable Audit Trail & Event Timeline
@@ -128,12 +133,14 @@ The codebase is hardened by **185 automated unit and integration tests** verifie
 ### Incident Endpoints (Secured)
 | Method | Endpoint | Description | Role Required |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/incidents/stats` | High-level metrics & SLA breaches | ADMIN, MANAGER, ENGINEER |
-| `GET` | `/api/v1/incidents` | Filterable & paginated incident list | ADMIN, MANAGER, ENGINEER |
-| `GET` | `/api/v1/incidents/{id}` | Retrieve incident details | ADMIN, MANAGER, ENGINEER |
-| `GET` | `/api/v1/incidents/{id}/history` | Chronological audit trail | ADMIN, MANAGER, ENGINEER |
+| `GET` | `/api/v1/incidents/stats` | High-level metrics & SLA breaches | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `GET` | `/api/v1/incidents` | Filterable & paginated incident list | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `GET` | `/api/v1/incidents/mine` | Authenticated engineer's assigned tickets | ENGINEER |
+| `GET` | `/api/v1/incidents/{id}` | Retrieve incident details | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `GET` | `/api/v1/incidents/{id}/history` | Chronological audit trail | ADMIN, MANAGER, ENGINEER, VIEWER |
 | `POST` | `/api/v1/incidents` | Create a new network incident | ADMIN, MANAGER |
 | `PATCH`| `/api/v1/incidents/{id}/assign` | Assign incident to field engineer | ADMIN, MANAGER |
+| `PATCH`| `/api/v1/incidents/{id}/unassign` | Unassign incident from engineer (resets to OPEN) | ADMIN, MANAGER |
 | `PATCH`| `/api/v1/incidents/{id}/status` | Advance status in lifecycle | ADMIN, MANAGER, ENGINEER |
 
 ### Engineer Endpoints (Secured)

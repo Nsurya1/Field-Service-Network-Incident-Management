@@ -218,4 +218,13 @@ class IncidentTest {
         assertEquals(now, incident.getUpdatedAt());
         assertEquals("Test Engineer", incident.getAssignedEngineer().getName());
     }
+
+    @Test
+    @DisplayName("Verify version getter and setter for optimistic locking")
+    void shouldSupportVersionGetterAndSetter() {
+        Incident incident = new Incident();
+        assertNull(incident.getVersion());
+        incident.setVersion(3L);
+        assertEquals(3L, incident.getVersion());
+    }
 }

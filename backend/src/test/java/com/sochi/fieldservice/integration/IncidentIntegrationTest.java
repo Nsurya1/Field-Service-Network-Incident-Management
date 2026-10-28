@@ -141,6 +141,12 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
     @Test
     @DisplayName("Verify status update follows valid lifecycle and persists correctly in PostgreSQL")
     void shouldUpdateIncidentStatusInDatabase() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Status Lifecycle Tech");
+        engineer.setEmail("lifecycle.tech@example.com");
+        engineer.setSpecialization("Core Network");
+        Engineer savedEngineer = engineerRepository.save(engineer);
+
         CreateIncidentRequest request = new CreateIncidentRequest();
         request.setTitle("UPS Battery Warning");
         request.setDescription("Generator backup needs inspection");
@@ -148,8 +154,9 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         request.setLocation("Power Room");
 
         Incident incident = incidentService.createIncident(request);
+        incidentService.assignIncident(incident.getId(), savedEngineer.getId());
 
-        // Lifecycle: OPEN -> IN_PROGRESS -> RESOLVED
+        // Lifecycle: ASSIGNED -> IN_PROGRESS -> RESOLVED
         incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS);
         Incident updated = incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.RESOLVED);
 
@@ -268,6 +275,7 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         req3.setPriority(IncidentPriority.MEDIUM);
         req3.setLocation("Cloud VM");
         Incident inc3 = incidentService.createIncident(req3);
+        incidentService.assignIncident(inc3.getId(), savedEngineer.getId());
         incidentService.updateIncidentStatus(inc3.getId(), IncidentStatus.IN_PROGRESS);
 
         // 4. Create a RESOLVED incident
@@ -277,6 +285,7 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         req4.setPriority(IncidentPriority.LOW);
         req4.setLocation("Switch 5");
         Incident inc4 = incidentService.createIncident(req4);
+        incidentService.assignIncident(inc4.getId(), savedEngineer.getId());
         incidentService.updateIncidentStatus(inc4.getId(), IncidentStatus.IN_PROGRESS);
         incidentService.updateIncidentStatus(inc4.getId(), IncidentStatus.RESOLVED);
 
@@ -318,6 +327,13 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         req.setLocation("Core PoP");
         Incident incident = incidentService.createIncident(req);
         Long id = incident.getId();
+
+        Engineer eng = new Engineer();
+        eng.setName("Timestamp Lifecycle Engineer");
+        eng.setEmail("timestamplifecycle@example.com");
+        eng.setSpecialization("Core Switch");
+        Engineer savedEng = engineerRepository.save(eng);
+        incidentService.assignIncident(id, savedEng.getId());
 
         LocalDateTime initialCreated = incident.getCreatedAt();
         LocalDateTime initialUpdated = incident.getUpdatedAt();
@@ -372,5 +388,105 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         assertNull(postReopen.getResolvedAt());
         assertNull(postReopen.getClosedAt());
         assertFalse(postReopen.isSlaBreached());
+    }
+
+    @Test
+    @DisplayName("Verify unassign resets status to OPEN, removes engineer, and appends UNASSIGNED audit history")
+    void shouldUnassignIncidentAndResetToOpenInDatabase() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Unassign Target Eng");
+        engineer.setEmail("unassign.target@example.com");
+        engineer.setSpecialization("Optical");
+        Engineer savedEngineer = engineerRepository.save(engineer);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("DWDM Link Degraded");
+        req.setDescription("Optical power dropping");
+        req.setPriority(IncidentPriority.HIGH);
+        req.setLocation("Span 12");
+        Incident incident = incidentService.createIncident(req);
+
+        incidentService.assignIncident(incident.getId(), savedEngineer.getId());
+        assertEquals(IncidentStatus.ASSIGNED, incidentRepository.findById(incident.getId()).orElseThrow().getStatus());
+
+        Incident unassigned = incidentService.unassignIncident(incident.getId());
+        assertEquals(IncidentStatus.OPEN, unassigned.getStatus());
+        assertNull(unassigned.getAssignedEngineer());
+
+        Incident fromDb = incidentRepository.findById(incident.getId()).orElseThrow();
+        assertEquals(IncidentStatus.OPEN, fromDb.getStatus());
+        assertNull(fromDb.getAssignedEngineer());
+
+        List<IncidentHistory> history = incidentService.getIncidentHistory(incident.getId());
+        assertEquals(3, history.size()); // CREATED, ASSIGNED, UNASSIGNED
+        assertEquals("UNASSIGNED", history.get(2).getAction());
+        assertTrue(history.get(2).getDescription().contains("Unassign Target Eng"));
+    }
+
+    @Test
+    @DisplayName("Verify transitioning to IN_PROGRESS without assigned engineer is blocked with HTTP 400")
+    void shouldBlockInProgressTransitionWhenNoEngineerAssigned() {
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Unassigned ticket test");
+        req.setDescription("No technician assigned");
+        req.setPriority(IncidentPriority.LOW);
+        Incident incident = incidentService.createIncident(req);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot transition to IN_PROGRESS without an assigned engineer"));
+    }
+
+    @Test
+    @DisplayName("Verify transitioning to RESOLVED without assigned engineer is blocked with HTTP 400")
+    void shouldBlockResolvedTransitionWhenNoEngineerAssigned() {
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Unassigned ticket test 2");
+        req.setDescription("No technician assigned");
+        req.setPriority(IncidentPriority.LOW);
+        Incident incident = incidentService.createIncident(req);
+
+        // Set status to IN_PROGRESS directly without engineer
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incidentRepository.save(incident);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.RESOLVED));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot transition to RESOLVED without an assigned engineer"));
+    }
+
+    @Test
+    @DisplayName("Verify assigning already IN_PROGRESS ticket to new engineer retains IN_PROGRESS status")
+    void shouldRetainInProgressStatusWhenReassigningIncident() {
+        Engineer eng1 = new Engineer();
+        eng1.setName("First Tech");
+        eng1.setEmail("first.tech@example.com");
+        eng1.setSpecialization("Field");
+        Engineer savedEng1 = engineerRepository.save(eng1);
+
+        Engineer eng2 = new Engineer();
+        eng2.setName("Second Tech");
+        eng2.setEmail("second.tech@example.com");
+        eng2.setSpecialization("Field");
+        Engineer savedEng2 = engineerRepository.save(eng2);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Substation link failure");
+        req.setDescription("Radio link misaligned");
+        req.setPriority(IncidentPriority.HIGH);
+        Incident incident = incidentService.createIncident(req);
+
+        incidentService.assignIncident(incident.getId(), savedEng1.getId());
+        incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS);
+
+        // Reassign to eng2
+        Incident reassigned = incidentService.assignIncident(incident.getId(), savedEng2.getId());
+
+        assertEquals(IncidentStatus.IN_PROGRESS, reassigned.getStatus(), "Status must remain IN_PROGRESS on reassignment");
+        assertEquals(savedEng2.getId(), reassigned.getAssignedEngineer().getId());
     }
 }

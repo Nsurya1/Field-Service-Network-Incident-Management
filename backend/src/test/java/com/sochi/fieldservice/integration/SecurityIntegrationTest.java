@@ -374,4 +374,53 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.message").value("Engineers can only update status on incidents assigned to them"));
     }
+
+    @Test
+    @DisplayName("Verify unassign endpoint security: ADMIN and MANAGER allowed, ENGINEER and VIEWER forbidden")
+    void shouldEnforceRbacOnUnassignEndpoint() throws Exception {
+        User admin = userRepository.save(new User("admin_unassign", "admin_u@test.com", "pass", Role.ROLE_ADMIN));
+        User manager = userRepository.save(new User("manager_unassign", "manager_u@test.com", "pass", Role.ROLE_MANAGER));
+        User engineer = userRepository.save(new User("eng_unassign", "eng_u@test.com", "pass", Role.ROLE_ENGINEER));
+        User viewer = userRepository.save(new User("viewer_unassign", "viewer_u@test.com", "pass", Role.ROLE_VIEWER));
+
+        String adminToken = "Bearer " + jwtUtils.generateToken(admin);
+        String managerToken = "Bearer " + jwtUtils.generateToken(manager);
+        String engToken = "Bearer " + jwtUtils.generateToken(engineer);
+        String viewerToken = "Bearer " + jwtUtils.generateToken(viewer);
+
+        Engineer tech = new Engineer();
+        tech.setName("Unassign Tech");
+        tech.setEmail("unatech@test.com");
+        tech.setSpecialization("Wireless");
+        tech = engineerRepository.save(tech);
+
+        Incident incident = new Incident();
+        incident.setTitle("Target incident");
+        incident.setDescription("Desc");
+        incident.setPriority(IncidentPriority.HIGH);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(tech);
+        Incident saved = incidentRepository.save(incident);
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(patch("/api/v1/incidents/" + saved.getId() + "/unassign"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. ENGINEER -> 403
+        mockMvc.perform(patch("/api/v1/incidents/" + saved.getId() + "/unassign")
+                        .header("Authorization", engToken))
+                .andExpect(status().isForbidden());
+
+        // 3. VIEWER -> 403
+        mockMvc.perform(patch("/api/v1/incidents/" + saved.getId() + "/unassign")
+                        .header("Authorization", viewerToken))
+                .andExpect(status().isForbidden());
+
+        // 4. MANAGER -> 200 OK
+        mockMvc.perform(patch("/api/v1/incidents/" + saved.getId() + "/unassign")
+                        .header("Authorization", managerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.assignedEngineerId").doesNotExist());
+    }
 }

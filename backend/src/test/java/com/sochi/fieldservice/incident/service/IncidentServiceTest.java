@@ -123,6 +123,7 @@ class IncidentServiceTest {
         incident.setTitle("Router failure");
         incident.setPriority(IncidentPriority.HIGH);
         incident.setStatus(IncidentStatus.OPEN);
+        incident.setAssignedEngineer(new Engineer());
 
         when(incidentRepository.findById(1L))
                 .thenReturn(java.util.Optional.of(incident));
@@ -165,6 +166,7 @@ class IncidentServiceTest {
         Incident incident = new Incident();
         incident.setTitle("Router failure");
         incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(new Engineer());
 
         when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
         when(incidentRepository.save(any(Incident.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -196,6 +198,7 @@ class IncidentServiceTest {
         Incident incident = new Incident();
         incident.setTitle("Router failure");
         incident.setStatus(IncidentStatus.RESOLVED);
+        incident.setAssignedEngineer(new Engineer());
         assertNotNull(incident.getResolvedAt());
 
         when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
@@ -223,7 +226,7 @@ class IncidentServiceTest {
         when(incidentRepository.findById(1L))
                 .thenReturn(java.util.Optional.of(incident));
 
-        when(engineerService.getEngineerById(2L))
+        when(engineerService.getEngineerByIdForUpdate(2L))
                 .thenReturn(engineer);
 
         when(incidentRepository.save(any(Incident.class)))
@@ -235,7 +238,7 @@ class IncidentServiceTest {
         assertEquals(IncidentStatus.ASSIGNED, result.getStatus());
 
         verify(incidentRepository).findById(1L);
-        verify(engineerService).getEngineerById(2L);
+        verify(engineerService).getEngineerByIdForUpdate(2L);
         verify(incidentRepository).save(incident);
         verify(incidentHistoryRepository).save(any(IncidentHistory.class));
     }
@@ -257,7 +260,7 @@ class IncidentServiceTest {
         assertEquals(400, exception.getStatusCode().value());
         assertEquals("Cannot assign engineer to a closed incident", exception.getReason());
         verify(incidentRepository, never()).save(any(Incident.class));
-        verify(engineerService, never()).getEngineerById(anyLong());
+        verify(engineerService, never()).getEngineerByIdForUpdate(anyLong());
     }
 
     @Test
@@ -272,7 +275,7 @@ class IncidentServiceTest {
 
         when(incidentRepository.findById(1L))
                 .thenReturn(java.util.Optional.of(incident));
-        when(engineerService.getEngineerById(2L))
+        when(engineerService.getEngineerByIdForUpdate(2L))
                 .thenReturn(engineer);
         when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(2L), anyList()))
                 .thenReturn(3L);
@@ -300,7 +303,7 @@ class IncidentServiceTest {
 
         when(incidentRepository.findById(1L))
                 .thenReturn(java.util.Optional.of(incident));
-        when(engineerService.getEngineerById(2L))
+        when(engineerService.getEngineerByIdForUpdate(2L))
                 .thenReturn(engineer);
         when(incidentRepository.save(any(Incident.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -329,7 +332,7 @@ class IncidentServiceTest {
 
         when(incidentRepository.findById(1L))
                 .thenReturn(java.util.Optional.of(incident));
-        when(engineerService.getEngineerById(2L))
+        when(engineerService.getEngineerByIdForUpdate(2L))
                 .thenReturn(newEngineer);
         when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(2L), anyList()))
                 .thenReturn(1L);
@@ -753,5 +756,152 @@ class IncidentServiceTest {
 
         assertNotNull(updated);
         assertEquals(IncidentStatus.IN_PROGRESS, updated.getStatus());
+    }
+
+    @Test
+    void assignIncidentWhenInProgressShouldRetainInProgressStatus() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Jane Tech");
+
+        Incident incident = new Incident();
+        incident.setTitle("Fibre loop cut");
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(engineerService.getEngineerByIdForUpdate(2L)).thenReturn(engineer);
+        when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(2L), anyList())).thenReturn(0L);
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.assignIncident(1L, 2L);
+
+        assertEquals(IncidentStatus.IN_PROGRESS, result.getStatus());
+        assertEquals(engineer, result.getAssignedEngineer());
+        verify(incidentRepository).save(incident);
+    }
+
+    @Test
+    void assignIncidentWhenResolvedShouldRetainResolvedStatus() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Bob Wire");
+
+        Incident incident = new Incident();
+        incident.setTitle("Power failure");
+        incident.setStatus(IncidentStatus.RESOLVED);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(engineerService.getEngineerByIdForUpdate(3L)).thenReturn(engineer);
+        when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(3L), anyList())).thenReturn(1L);
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.assignIncident(1L, 3L);
+
+        assertEquals(IncidentStatus.RESOLVED, result.getStatus());
+        assertEquals(engineer, result.getAssignedEngineer());
+    }
+
+    @Test
+    void updateIncidentStatusToInProgressWithoutEngineerShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.OPEN);
+        incident.setAssignedEngineer(null);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.IN_PROGRESS));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot transition to IN_PROGRESS without an assigned engineer"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void updateIncidentStatusToResolvedWithoutEngineerShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(null);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.RESOLVED));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot transition to RESOLVED without an assigned engineer"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void unassignIncidentWhenAssignedShouldResetToOpen() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Alice Field");
+
+        Incident incident = new Incident();
+        incident.setId(10L);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(engineer);
+
+        when(incidentRepository.findById(10L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.unassignIncident(10L);
+
+        assertEquals(IncidentStatus.OPEN, result.getStatus());
+        assertNull(result.getAssignedEngineer());
+        verify(incidentHistoryRepository).save(any(IncidentHistory.class));
+    }
+
+    @Test
+    void unassignIncidentWhenInProgressShouldResetToOpen() {
+        Engineer engineer = new Engineer();
+        engineer.setName("Bob Tech");
+
+        Incident incident = new Incident();
+        incident.setId(11L);
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(engineer);
+
+        when(incidentRepository.findById(11L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.unassignIncident(11L);
+
+        assertEquals(IncidentStatus.OPEN, result.getStatus());
+        assertNull(result.getAssignedEngineer());
+        verify(incidentHistoryRepository).save(any(IncidentHistory.class));
+    }
+
+    @Test
+    void unassignIncidentWhenClosedShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setId(12L);
+        incident.setStatus(IncidentStatus.CLOSED);
+
+        when(incidentRepository.findById(12L)).thenReturn(Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.unassignIncident(12L));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot unassign engineer from a CLOSED incident"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void unassignIncidentWhenResolvedShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setId(13L);
+        incident.setStatus(IncidentStatus.RESOLVED);
+
+        when(incidentRepository.findById(13L)).thenReturn(Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.unassignIncident(13L));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Cannot unassign engineer from a RESOLVED incident"));
+        verify(incidentRepository, never()).save(any(Incident.class));
     }
 }
