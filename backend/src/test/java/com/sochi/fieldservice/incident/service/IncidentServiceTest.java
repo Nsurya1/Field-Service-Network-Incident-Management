@@ -32,6 +32,13 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import java.util.List;
 
+import com.sochi.fieldservice.user.entity.Role;
+import com.sochi.fieldservice.user.entity.User;
+import com.sochi.fieldservice.user.repository.UserRepository;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.util.Optional;
+
 @ExtendWith(MockitoExtension.class)
 class IncidentServiceTest {
 
@@ -43,6 +50,9 @@ class IncidentServiceTest {
 
     @Mock
     private IncidentHistoryRepository incidentHistoryRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private IncidentService incidentService;
@@ -535,4 +545,213 @@ class IncidentServiceTest {
         verify(incidentRepository).countByStatusInAndSlaDeadlineBefore(anyList(), any(java.time.LocalDateTime.class));
     }
 
+    @Test
+    void getIncidentsForEngineerShouldReturnOnlyAssignedIncidents() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 42L);
+        User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
+        when(incidentRepository.findByAssignedEngineerId(42L, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(new Incident())));
+
+        Page<Incident> result = incidentService.getIncidents(null, null, PageRequest.of(0, 10), "tech");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        verify(incidentRepository).findByAssignedEngineerId(42L, PageRequest.of(0, 10));
+    }
+
+    @Test
+    void getIncidentsForEngineerWithStatusAndPriorityShouldFilterCorrectly() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 42L);
+        User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
+        when(incidentRepository.findByAssignedEngineerIdAndStatusAndPriority(42L, IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(new Incident())));
+
+        Page<Incident> result = incidentService.getIncidents(IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10), "tech");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        verify(incidentRepository).findByAssignedEngineerIdAndStatusAndPriority(42L, IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10));
+    }
+
+    @Test
+    void getIncidentsForEngineerWithStatusOnlyShouldFilterByStatus() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 42L);
+        User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
+        when(incidentRepository.findByAssignedEngineerIdAndStatus(42L, IncidentStatus.IN_PROGRESS, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(new Incident())));
+
+        Page<Incident> result = incidentService.getIncidents(IncidentStatus.IN_PROGRESS, null, PageRequest.of(0, 10), "tech");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void getIncidentsForEngineerWithPriorityOnlyShouldFilterByPriority() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 42L);
+        User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
+        when(incidentRepository.findByAssignedEngineerIdAndPriority(42L, IncidentPriority.CRITICAL, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(new Incident())));
+
+        Page<Incident> result = incidentService.getIncidents(null, IncidentPriority.CRITICAL, PageRequest.of(0, 10), "tech");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void getIncidentsForUnlinkedEngineerShouldReturnEmptyPage() {
+        User unlinkedTech = new User("tech2", "tech2@test.com", "pass", Role.ROLE_ENGINEER, null);
+        when(userRepository.findByUsername("tech2")).thenReturn(Optional.of(unlinkedTech));
+
+        Page<Incident> result = incidentService.getIncidents(null, null, PageRequest.of(0, 10), "tech2");
+
+        assertNotNull(result);
+        assertEquals(0, result.getTotalElements());
+        verifyNoInteractions(incidentRepository);
+    }
+
+    @Test
+    void getMyIncidentsShouldReturnUserAssignedIncidents() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 42L);
+        User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
+        when(incidentRepository.findByAssignedEngineerId(42L, PageRequest.of(0, 10)))
+                .thenReturn(new PageImpl<>(List.of(new Incident())));
+
+        Page<Incident> result = incidentService.getMyIncidents(null, null, PageRequest.of(0, 10), "tech");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void getMyIncidentsWithNullUsernameShouldThrow401() {
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.getMyIncidents(null, null, PageRequest.of(0, 10), null));
+        assertEquals(401, ex.getStatusCode().value());
+    }
+
+    @Test
+    void getMyIncidentsWithUserNotFoundShouldThrow404() {
+        when(userRepository.findByUsername("nonexistent")).thenReturn(Optional.empty());
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.getMyIncidents(null, null, PageRequest.of(0, 10), "nonexistent"));
+        assertEquals(404, ex.getStatusCode().value());
+    }
+
+    @Test
+    void getMyIncidentsForUnlinkedUserShouldReturnEmptyPage() {
+        User unlinked = new User("user_no_eng", "email@test.com", "pass", Role.ROLE_ENGINEER, null);
+        when(userRepository.findByUsername("user_no_eng")).thenReturn(Optional.of(unlinked));
+
+        Page<Incident> result = incidentService.getMyIncidents(null, null, PageRequest.of(0, 10), "user_no_eng");
+        assertNotNull(result);
+        assertEquals(0, result.getTotalElements());
+    }
+
+    @Test
+    void updateIncidentStatusAsEngineerOnOwnIncidentShouldSucceed() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 10L);
+        User tech = new User("tech1", "tech1@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(engineer);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(userRepository.findByUsername("tech1")).thenReturn(Optional.of(tech));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident updated = incidentService.updateIncidentStatus(1L, IncidentStatus.IN_PROGRESS, "tech1");
+
+        assertNotNull(updated);
+        assertEquals(IncidentStatus.IN_PROGRESS, updated.getStatus());
+        verify(incidentHistoryRepository).save(any(IncidentHistory.class));
+    }
+
+    @Test
+    void updateIncidentStatusAsEngineerOnOtherEngineerIncidentShouldThrow403() {
+        Engineer engineer1 = new Engineer();
+        ReflectionTestUtils.setField(engineer1, "id", 10L);
+        Engineer engineer2 = new Engineer();
+        ReflectionTestUtils.setField(engineer2, "id", 20L);
+
+        User tech1 = new User("tech1", "tech1@test.com", "pass", Role.ROLE_ENGINEER, engineer1);
+
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(engineer2);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(userRepository.findByUsername("tech1")).thenReturn(Optional.of(tech1));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.IN_PROGRESS, "tech1"));
+
+        assertEquals(403, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Engineers can only update status on incidents assigned to them"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void updateIncidentStatusAsEngineerOnUnassignedIncidentShouldThrow403() {
+        Engineer engineer1 = new Engineer();
+        ReflectionTestUtils.setField(engineer1, "id", 10L);
+        User tech1 = new User("tech1", "tech1@test.com", "pass", Role.ROLE_ENGINEER, engineer1);
+
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.OPEN);
+        incident.setAssignedEngineer(null);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(userRepository.findByUsername("tech1")).thenReturn(Optional.of(tech1));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.IN_PROGRESS, "tech1"));
+
+        assertEquals(403, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Engineers can only update status on incidents assigned to them"));
+    }
+
+    @Test
+    void updateIncidentStatusAsAdminCanUpdateAnyIncident() {
+        Engineer engineer2 = new Engineer();
+        ReflectionTestUtils.setField(engineer2, "id", 20L);
+
+        User admin = new User("admin", "admin@test.com", "pass", Role.ROLE_ADMIN, null);
+
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(engineer2);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident updated = incidentService.updateIncidentStatus(1L, IncidentStatus.IN_PROGRESS, "admin");
+
+        assertNotNull(updated);
+        assertEquals(IncidentStatus.IN_PROGRESS, updated.getStatus());
+    }
 }

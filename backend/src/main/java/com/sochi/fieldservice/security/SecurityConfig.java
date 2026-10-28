@@ -94,7 +94,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/incidents").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/incidents/*/assign").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/incidents/*/status").hasAnyRole("ADMIN", "MANAGER", "ENGINEER")
-                        .requestMatchers(HttpMethod.GET, "/api/v1/incidents/**").hasAnyRole("ADMIN", "MANAGER", "ENGINEER")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/incidents/**").hasAnyRole("ADMIN", "MANAGER", "ENGINEER", "VIEWER")
 
                         .anyRequest().authenticated()
                 )

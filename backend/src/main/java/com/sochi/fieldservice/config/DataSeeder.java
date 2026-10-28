@@ -99,13 +99,13 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         log.info("Starting demo data seeding for 'dev' profile...");
-        seedUsers();
         List<Engineer> engineers = seedEngineers();
+        seedUsers(engineers);
         seedIncidents(engineers);
         log.info("Demo data seeding completed successfully.");
     }
 
-    private void seedUsers() {
+    private void seedUsers(List<Engineer> engineers) {
         if (userRepository.findByUsername("admin").isEmpty()) {
             User admin = new User("admin", "admin@telecom.net", passwordEncoder.encode(defaultPassword), Role.ROLE_ADMIN);
             userRepository.save(admin);
@@ -119,9 +119,16 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         if (userRepository.findByUsername("technician").isEmpty()) {
-            User technician = new User("technician", "technician@telecom.net", passwordEncoder.encode(defaultPassword), Role.ROLE_ENGINEER);
+            Engineer primaryEngineer = (engineers != null && !engineers.isEmpty()) ? engineers.get(0) : null;
+            User technician = new User("technician", "technician@telecom.net", passwordEncoder.encode(defaultPassword), Role.ROLE_ENGINEER, primaryEngineer);
             userRepository.save(technician);
-            log.info("Seeded user 'technician' (ROLE_ENGINEER)");
+            log.info("Seeded user 'technician' (ROLE_ENGINEER) linked to engineer {}", primaryEngineer != null ? primaryEngineer.getName() : "none");
+        }
+
+        if (userRepository.findByUsername("viewer").isEmpty()) {
+            User viewer = new User("viewer", "viewer@telecom.net", passwordEncoder.encode(defaultPassword), Role.ROLE_VIEWER);
+            userRepository.save(viewer);
+            log.info("Seeded user 'viewer' (ROLE_VIEWER)");
         }
     }
 

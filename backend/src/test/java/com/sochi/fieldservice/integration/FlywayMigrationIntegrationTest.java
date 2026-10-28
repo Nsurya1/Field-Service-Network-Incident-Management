@@ -25,12 +25,12 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("Verify Flyway migrations V1 and V2 are applied and registered in test database")
+    @DisplayName("Verify Flyway migrations V1, V2, and V3 are applied and registered in test database")
     void shouldApplyAndTrackFlywayMigrations() {
         assertNotNull(flyway, "Flyway bean must be initialized by Spring Boot");
 
         MigrationInfo[] applied = flyway.info().applied();
-        assertTrue(applied.length >= 2, "Both V1 and V2 migrations must be applied");
+        assertTrue(applied.length >= 3, "Migrations V1, V2, and V3 must be applied");
 
         List<String> versions = Arrays.stream(applied)
                 .map(info -> info.getVersion().getVersion())
@@ -38,6 +38,7 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
 
         assertTrue(versions.contains("1"), "Migration V1 baseline must be recorded");
         assertTrue(versions.contains("2"), "Migration V2 timestamp extension must be recorded");
+        assertTrue(versions.contains("3"), "Migration V3 link user to engineer must be recorded");
 
         // Verify all applied migrations have status SUCCESS
         for (MigrationInfo info : applied) {
@@ -50,15 +51,14 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
                 Integer.class
         );
         assertNotNull(count);
-        assertTrue(count >= 2, "flyway_schema_history must record successful migrations");
+        assertTrue(count >= 3, "flyway_schema_history must have at least 3 successful records");
 
-        // Verify new columns from V2 exist on incident table
-        Integer columnCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM information_schema.columns " +
-                "WHERE table_name = 'incident' AND column_name IN ('resolved_at', 'closed_at')",
+        // Verify engineer_id column exists on users table
+        Integer colCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'engineer_id'",
                 Integer.class
         );
-        assertNotNull(columnCount);
-        assertEquals(2, columnCount, "incident table must contain both resolved_at and closed_at columns");
+        assertNotNull(colCount);
+        assertEquals(1, colCount, "users table must contain engineer_id column");
     }
 }

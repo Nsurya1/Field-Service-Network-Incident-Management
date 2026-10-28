@@ -51,7 +51,7 @@ class DataSeederIntegrationTest extends BaseIntegrationTest {
         // First execution - seed data
         seeder.run();
 
-        // 1. Verify 3 users
+        // 1. Verify 4 users
         Optional<User> adminOpt = userRepository.findByUsername("admin");
         assertTrue(adminOpt.isPresent(), "Admin user must be seeded");
         assertEquals(Role.ROLE_ADMIN, adminOpt.get().getRole());
@@ -64,6 +64,11 @@ class DataSeederIntegrationTest extends BaseIntegrationTest {
         Optional<User> technicianOpt = userRepository.findByUsername("technician");
         assertTrue(technicianOpt.isPresent(), "Technician user must be seeded");
         assertEquals(Role.ROLE_ENGINEER, technicianOpt.get().getRole());
+        assertNotNull(technicianOpt.get().getEngineer(), "Technician user should be linked to an Engineer");
+
+        Optional<User> viewerOpt = userRepository.findByUsername("viewer");
+        assertTrue(viewerOpt.isPresent(), "Viewer user must be seeded");
+        assertEquals(Role.ROLE_VIEWER, viewerOpt.get().getRole());
 
         // 2. Verify 8 engineers
         List<Engineer> engineers = engineerRepository.findAll();
@@ -99,7 +104,7 @@ class DataSeederIntegrationTest extends BaseIntegrationTest {
         // 6. Test Idempotency: second run must not create duplicates
         seeder.run();
 
-        assertEquals(3, userRepository.count(), "User count must remain 3 after re-run");
+        assertEquals(4, userRepository.count(), "User count must remain 4 after re-run");
         assertEquals(8, engineerRepository.count(), "Engineer count must remain 8 after re-run");
         assertEquals(40, incidentRepository.count(), "Incident count must remain 40 after re-run");
     }

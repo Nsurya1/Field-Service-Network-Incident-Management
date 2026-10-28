@@ -1,5 +1,7 @@
 package com.sochi.fieldservice.user.service;
 
+import com.sochi.fieldservice.engineer.entity.Engineer;
+import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.user.dto.AdminCreateUserRequest;
 import com.sochi.fieldservice.user.dto.UserResponse;
 import com.sochi.fieldservice.user.entity.Role;
@@ -15,10 +17,14 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final EngineerRepository engineerRepository;
     private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public UserService(UserRepository userRepository,
+                       EngineerRepository engineerRepository,
+                       PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
+        this.engineerRepository = engineerRepository;
         this.passwordEncoder = passwordEncoder;
     }
 
@@ -43,6 +49,15 @@ public class UserService {
                 passwordEncoder.encode(request.getPassword()),
                 role
         );
+
+        if (request.getEngineerId() != null) {
+            Engineer engineer = engineerRepository.findById(request.getEngineerId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                            HttpStatus.NOT_FOUND,
+                            "Engineer not found with ID: " + request.getEngineerId()
+                    ));
+            user.setEngineer(engineer);
+        }
 
         User savedUser = userRepository.save(user);
         return UserResponse.fromEntity(savedUser);

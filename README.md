@@ -77,21 +77,25 @@ Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`) automatically re
 ### 5. High-Performance Dashboard Analytics
 Aggregated metrics (`GET /api/v1/incidents/stats`) calculate total volume, status distribution, active tickets, and breached SLAs using database-level aggregate SQL queries.
 
-### 6. Role-Based Access Control (RBAC) with Stateless JWT
-- **ROLE_ADMIN:** Full system access (create engineers, reassign incidents, view stats).
+### 6. Role-Based Access Control (RBAC) & Ownership Security
+- **ROLE_ADMIN:** Full system access (create engineers, reassign incidents, manage users, view stats).
 - **ROLE_MANAGER:** Team dispatch (create & assign incidents, view engineers and analytics).
-- **ROLE_ENGINEER:** Field technician (view assigned incidents, advance ticket statuses).
+- **ROLE_ENGINEER:** Field technician with ownership-based access control:
+  - `GET /api/v1/incidents` returns only tickets assigned to the authenticated engineer.
+  - `GET /api/v1/incidents/mine` provides direct access to the technician's active workload.
+  - `PATCH /api/v1/incidents/{id}/status` strictly permits status progression on tickets assigned to them (rejects with **HTTP 403 Forbidden** on unassigned or peer tickets).
+- **ROLE_VIEWER:** Read-only stakeholder access (view all incidents, event history, and stats; mutations rejected with **HTTP 403 Forbidden**).
 - Password security enforced via `BCryptPasswordEncoder`.
 
 ---
 
 ## 🧪 Test Coverage & Quality Assurance
 
-The codebase is hardened by **125 automated unit and integration tests** verified by JaCoCo:
+The codebase is hardened by **185 automated unit and integration tests** verified by JaCoCo:
 
-- **Overall Instruction Coverage:** **99.78%** (2,223 / 2,228 instructions)
-- **Overall Branch Coverage:** **98.26%** (113 / 115 branches)
-- **Integration Tests:** Tested against a real dedicated PostgreSQL test database (`fieldservice_test`), verifying relational constraints, `@PrePersist` hooks, transactions, and security filter chains.
+- **Overall Instruction Coverage:** **>99.3%**
+- **Overall Branch Coverage:** **>90.0%**
+- **Integration Tests:** Tested against real PostgreSQL 17 test containers using Testcontainers, verifying Flyway schema migrations (V1, V2, V3), relational foreign keys, `@PrePersist` hooks, transactions, and security filter chains.
 
 | Component / Layer | Instruction Coverage | Branch Coverage | Test Class |
 | :--- | :---: | :---: | :--- |
@@ -241,12 +245,13 @@ View the generated HTML coverage report at:
 ## 👤 Sample Login Accounts & Demo Seed Data
 
 In the development profile (`dev`), the application includes an idempotent `DataSeeder` (`CommandLineRunner`) that automatically seeds:
-- **3 Core User Accounts** (with default password `password123`, overridable via `APP_SEED_PASSWORD`):
+- **4 Core User Accounts** (with default password `password123`, overridable via `APP_SEED_PASSWORD`):
   | Username | Default Password | Role | Description |
   | :--- | :--- | :--- | :--- |
   | `admin` | `password123` | `ROLE_ADMIN` | Full administrative capabilities |
   | `dispatcher` | `password123` | `ROLE_MANAGER` | Dispatch and ticket assignment |
-  | `technician` | `password123` | `ROLE_ENGINEER` | Field ticket resolution |
+  | `technician` | `password123` | `ROLE_ENGINEER` | Field ticket resolution (linked to field engineer profile) |
+  | `viewer` | `password123` | `ROLE_VIEWER` | Read-only inspection of incidents and analytics |
 - **8 Field Engineers** across telecommunications specializations (`Fibre`, `Router`, `Wireless`, and `Power`).
 - **40 Realistic Network Incidents** across all statuses (`OPEN`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) and priorities (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), including active and resolved SLA breaches to populate dashboard analytics immediately.
 - **Idempotency Guarantee**: Running the server multiple times detects existing records and safely skips without duplicating rows. Disabled in production and test profiles.

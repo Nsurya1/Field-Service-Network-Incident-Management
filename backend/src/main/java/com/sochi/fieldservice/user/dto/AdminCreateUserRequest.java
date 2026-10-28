@@ -23,14 +23,21 @@ public class AdminCreateUserRequest {
     @NotNull(message = "Role is required")
     private Role role;
 
+    private Long engineerId;
+
     public AdminCreateUserRequest() {
     }
 
     public AdminCreateUserRequest(String username, String email, String password, Role role) {
+        this(username, email, password, role, null);
+    }
+
+    public AdminCreateUserRequest(String username, String email, String password, Role role, Long engineerId) {
         this.username = username;
         this.email = email;
         this.password = password;
         this.role = role;
+        this.engineerId = engineerId;
     }
 
     public String getUsername() {
@@ -63,5 +70,13 @@ public class AdminCreateUserRequest {
 
     public void setRole(Role role) {
         this.role = role;
+    }
+
+    public Long getEngineerId() {
+        return engineerId;
+    }
+
+    public void setEngineerId(Long engineerId) {
+        this.engineerId = engineerId;
     }
 }

@@ -1,15 +1,15 @@
 package com.sochi.fieldservice.incident.controller;
 
+import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.AssignIncidentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentHistoryResponse;
 import com.sochi.fieldservice.incident.dto.IncidentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
+import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
-import com.sochi.fieldservice.incident.IncidentService;
-
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -45,7 +46,8 @@ public class IncidentController {
             @RequestParam(required = false) IncidentStatus status,
             @RequestParam(required = false) IncidentPriority priority,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            Principal principal) {
 
         if (page < 0 || size < 1 || size > 100) {
             throw new ResponseStatusException(
@@ -60,8 +62,42 @@ public class IncidentController {
                 Sort.by(Sort.Direction.DESC, "createdAt")
         );
 
+        String username = principal != null ? principal.getName() : null;
+
+        Page<Incident> result = (username != null)
+                ? incidentService.getIncidents(status, priority, pageable, username)
+                : incidentService.getIncidents(status, priority, pageable);
+
+        return result.map(IncidentResponse::new);
+    }
+
+    @GetMapping("/mine")
+    public Page<IncidentResponse> getMyIncidents(
+            @RequestParam(required = false) IncidentStatus status,
+            @RequestParam(required = false) IncidentPriority priority,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            Principal principal) {
+
+        if (page < 0 || size < 1 || size > 100) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Page must be non-negative and size must be between 1 and 100"
+            );
+        }
+
+        if (principal == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
+        }
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "createdAt")
+        );
+
         return incidentService
-                .getIncidents(status, priority, pageable)
+                .getMyIncidents(status, priority, pageable, principal.getName())
                 .map(IncidentResponse::new);
     }
 
@@ -87,11 +123,16 @@ public class IncidentController {
     @PatchMapping("/{id}/status")
     public IncidentResponse updateIncidentStatus(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateIncidentStatusRequest request) {
+            @Valid @RequestBody UpdateIncidentStatusRequest request,
+            Principal principal) {
 
-        return new IncidentResponse(
-                incidentService.updateIncidentStatus(
-                        id, request.getStatus()));
+        String username = principal != null ? principal.getName() : null;
+
+        Incident result = (username != null)
+                ? incidentService.updateIncidentStatus(id, request.getStatus(), username)
+                : incidentService.updateIncidentStatus(id, request.getStatus());
+
+        return new IncidentResponse(result);
     }
 
     @PatchMapping("/{id}/assign")

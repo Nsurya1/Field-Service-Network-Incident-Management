@@ -1,5 +1,6 @@
 package com.sochi.fieldservice.user.entity;
 
+import com.sochi.fieldservice.engineer.entity.Engineer;
 import jakarta.persistence.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -33,6 +34,10 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "engineer_id")
+    private Engineer engineer;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -43,10 +48,15 @@ public class User implements UserDetails {
     }
 
     public User(String username, String email, String password, Role role) {
+        this(username, email, password, role, null);
+    }
+
+    public User(String username, String email, String password, Role role, Engineer engineer) {
         this.username = username;
         this.email = email;
         this.password = password;
         this.role = role;
+        this.engineer = engineer;
         this.enabled = true;
     }
 
@@ -68,7 +78,10 @@ public class User implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority(role != null ? role.name() : "ROLE_USER"));
+        if (role == null) {
+            return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        }
+        return List.of(new SimpleGrantedAuthority(role.name()));
     }
 
     @Override
@@ -135,6 +148,14 @@ public class User implements UserDetails {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public Engineer getEngineer() {
+        return engineer;
+    }
+
+    public void setEngineer(Engineer engineer) {
+        this.engineer = engineer;
     }
 
     public LocalDateTime getCreatedAt() {

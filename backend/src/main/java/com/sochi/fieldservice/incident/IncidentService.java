@@ -6,19 +6,21 @@ import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
-import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
+import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
-
+import com.sochi.fieldservice.user.entity.Role;
+import com.sochi.fieldservice.user.entity.User;
+import com.sochi.fieldservice.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,18 +32,21 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
     private final EngineerService engineerService;
     private final IncidentHistoryRepository incidentHistoryRepository;
-    private static final Logger logger =
-            LoggerFactory.getLogger(IncidentService.class);
+    private final UserRepository userRepository;
+    private static final Logger logger = LoggerFactory.getLogger(IncidentService.class);
 
     public IncidentService(
             IncidentRepository incidentRepository,
             EngineerService engineerService,
-            IncidentHistoryRepository incidentHistoryRepository) {
+            IncidentHistoryRepository incidentHistoryRepository,
+            UserRepository userRepository) {
         this.incidentRepository = incidentRepository;
         this.engineerService = engineerService;
         this.incidentHistoryRepository = incidentHistoryRepository;
+        this.userRepository = userRepository;
     }
 
+    @Transactional
     public Incident createIncident(CreateIncidentRequest request) {
         Incident incident = new Incident();
 
@@ -82,6 +87,7 @@ public class IncidentService {
                 ));
     }
 
+    @Transactional
     public Incident assignIncident(Long incidentId, Long engineerId) {
 
         Incident incident = getIncidentById(incidentId);
@@ -131,6 +137,24 @@ public class IncidentService {
             IncidentStatus status,
             IncidentPriority priority,
             Pageable pageable) {
+        return getIncidents(status, priority, pageable, null);
+    }
+
+    public Page<Incident> getIncidents(
+            IncidentStatus status,
+            IncidentPriority priority,
+            Pageable pageable,
+            String username) {
+
+        if (username != null) {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user != null && user.getRole() == Role.ROLE_ENGINEER) {
+                if (user.getEngineer() == null) {
+                    return Page.empty(pageable);
+                }
+                return getIncidentsForEngineer(user.getEngineer().getId(), status, priority, pageable);
+            }
+        }
 
         if (status != null && priority != null) {
             return incidentRepository.findByStatusAndPriority(
@@ -148,11 +172,81 @@ public class IncidentService {
         return incidentRepository.findAll(pageable);
     }
 
+    public Page<Incident> getMyIncidents(
+            IncidentStatus status,
+            IncidentPriority priority,
+            Pageable pageable,
+            String username) {
+
+        if (username == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Username required to fetch assigned incidents");
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "User not found with username: " + username
+                ));
+
+        if (user.getEngineer() == null) {
+            return Page.empty(pageable);
+        }
+
+        return getIncidentsForEngineer(user.getEngineer().getId(), status, priority, pageable);
+    }
+
+    private Page<Incident> getIncidentsForEngineer(
+            Long engineerId,
+            IncidentStatus status,
+            IncidentPriority priority,
+            Pageable pageable) {
+
+        if (status != null && priority != null) {
+            return incidentRepository.findByAssignedEngineerIdAndStatusAndPriority(
+                    engineerId, status, priority, pageable);
+        }
+
+        if (status != null) {
+            return incidentRepository.findByAssignedEngineerIdAndStatus(
+                    engineerId, status, pageable);
+        }
+
+        if (priority != null) {
+            return incidentRepository.findByAssignedEngineerIdAndPriority(
+                    engineerId, priority, pageable);
+        }
+
+        return incidentRepository.findByAssignedEngineerId(engineerId, pageable);
+    }
+
+    @Transactional
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus) {
+        return updateIncidentStatus(id, newStatus, null);
+    }
+
+    @Transactional
+    public Incident updateIncidentStatus(
+            Long id,
+            IncidentStatus newStatus,
+            String username) {
 
         Incident incident = getIncidentById(id);
+
+        if (username != null) {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user != null && user.getRole() == Role.ROLE_ENGINEER) {
+                if (incident.getAssignedEngineer() == null ||
+                        user.getEngineer() == null ||
+                        !incident.getAssignedEngineer().getId().equals(user.getEngineer().getId())) {
+                    throw new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            "Engineers can only update status on incidents assigned to them"
+                    );
+                }
+            }
+        }
 
         if (!incident.canTransitionTo(newStatus)) {
             throw new ResponseStatusException(
@@ -198,5 +292,4 @@ public class IncidentService {
                 total, open, assigned, inProgress, resolved, closed, active, breached
         );
     }
-
 }

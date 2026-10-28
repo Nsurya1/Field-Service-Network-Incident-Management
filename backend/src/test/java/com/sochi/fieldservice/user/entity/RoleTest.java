@@ -9,9 +9,10 @@ class RoleTest {
 
     @Test
     void shouldHaveExpectedRoles() {
-        assertEquals(3, Role.values().length);
+        assertEquals(4, Role.values().length);
         assertNotNull(Role.valueOf("ROLE_ADMIN"));
         assertNotNull(Role.valueOf("ROLE_MANAGER"));
         assertNotNull(Role.valueOf("ROLE_ENGINEER"));
+        assertNotNull(Role.valueOf("ROLE_VIEWER"));
     }
 }

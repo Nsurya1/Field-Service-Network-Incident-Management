@@ -79,4 +79,17 @@ class UserTest {
         user.onUpdate();
         assertNotNull(user.getUpdatedAt());
     }
+
+    @Test
+    void shouldSupportEngineerAssociationAndConstructors() {
+        com.sochi.fieldservice.engineer.entity.Engineer engineer = new com.sochi.fieldservice.engineer.entity.Engineer();
+        engineer.setName("Rajesh");
+
+        User user = new User("tech", "tech@example.com", "secret", Role.ROLE_ENGINEER, engineer);
+        assertEquals(engineer, user.getEngineer());
+
+        User user2 = new User();
+        user2.setEngineer(engineer);
+        assertEquals(engineer, user2.getEngineer());
+    }
 }

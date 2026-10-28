@@ -87,14 +87,15 @@ class DataSeederTest {
 
         dataSeeder.run();
 
-        // 1. Verify 3 users seeded
+        // 1. Verify 4 users seeded
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository, times(3)).save(userCaptor.capture());
+        verify(userRepository, times(4)).save(userCaptor.capture());
         List<User> savedUsers = userCaptor.getAllValues();
-        assertEquals(3, savedUsers.size());
+        assertEquals(4, savedUsers.size());
         assertTrue(savedUsers.stream().anyMatch(u -> u.getUsername().equals("admin") && u.getRole() == Role.ROLE_ADMIN));
         assertTrue(savedUsers.stream().anyMatch(u -> u.getUsername().equals("dispatcher") && u.getRole() == Role.ROLE_MANAGER));
         assertTrue(savedUsers.stream().anyMatch(u -> u.getUsername().equals("technician") && u.getRole() == Role.ROLE_ENGINEER));
+        assertTrue(savedUsers.stream().anyMatch(u -> u.getUsername().equals("viewer") && u.getRole() == Role.ROLE_VIEWER));
 
         // 2. Verify 8 engineers seeded
         verify(engineerRepository).saveAll(anyList());
@@ -112,6 +113,7 @@ class DataSeederTest {
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(new User()));
         when(userRepository.findByUsername("dispatcher")).thenReturn(Optional.of(new User()));
         when(userRepository.findByUsername("technician")).thenReturn(Optional.of(new User()));
+        when(userRepository.findByUsername("viewer")).thenReturn(Optional.of(new User()));
         when(engineerRepository.count()).thenReturn(8L);
         when(incidentRepository.count()).thenReturn(40L);
 

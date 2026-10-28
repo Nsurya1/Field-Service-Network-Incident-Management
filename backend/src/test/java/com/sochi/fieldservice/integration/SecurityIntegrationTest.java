@@ -1,5 +1,11 @@
 package com.sochi.fieldservice.integration;
 
+import com.sochi.fieldservice.engineer.entity.Engineer;
+import com.sochi.fieldservice.engineer.repository.EngineerRepository;
+import com.sochi.fieldservice.incident.entity.Incident;
+import com.sochi.fieldservice.incident.entity.IncidentPriority;
+import com.sochi.fieldservice.incident.entity.IncidentStatus;
+import com.sochi.fieldservice.incident.repository.IncidentRepository;
 import com.sochi.fieldservice.security.AuthService;
 import com.sochi.fieldservice.security.dto.AuthResponse;
 import com.sochi.fieldservice.security.dto.LoginRequest;
@@ -22,8 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,6 +49,12 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private EngineerRepository engineerRepository;
+
+    @Autowired
+    private IncidentRepository incidentRepository;
 
     @Autowired
     private JwtUtils jwtUtils;
@@ -105,9 +116,9 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {
-                                "name": "New Tech",
-                                "email": "new.tech@example.com",
-                                "specialization": "Fiber"
+                                "name": "Unauthorized Add",
+                                "email": "unauth@example.com",
+                                "specialization": "Fibre"
                             }
                             """))
                 .andExpect(status().isForbidden())
@@ -116,31 +127,31 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
     }
 
     @Test
-    @DisplayName("Verify Role-Based Access Control: Admin can access Admin endpoints")
+    @DisplayName("Verify Admin can access Admin-protected endpoints")
     void shouldAllowAdminToAccessAdminEndpoints() throws Exception {
-        userService.createUser(
-                new AdminCreateUserRequest("super_admin", "super_admin@example.com", "pass1234", Role.ROLE_ADMIN)
-        );
+        User admin = new User("super_admin", "admin@example.com", "hashed_pass", Role.ROLE_ADMIN);
+        userRepository.save(admin);
 
-        AuthResponse adminAuth = authService.login(new LoginRequest("super_admin", "pass1234"));
+        String adminToken = jwtUtils.generateToken(admin);
 
         mockMvc.perform(post("/api/v1/engineers")
-                        .header("Authorization", "Bearer " + adminAuth.getToken())
+                        .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {
-                                "name": "New Tech",
-                                "email": "new.tech@example.com",
-                                "specialization": "Fiber"
+                                "name": "Valid Engineer",
+                                "email": "valid.engineer@example.com",
+                                "specialization": "Router"
                             }
                             """))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("New Tech"));
+                .andExpect(jsonPath("$.name").value("Valid Engineer"))
+                .andExpect(jsonPath("$.email").value("valid.engineer@example.com"));
     }
 
     @Test
-    @DisplayName("Verify public register request containing role=ROLE_ADMIN still yields ROLE_ENGINEER")
-    void shouldYieldRoleEngineerEvenWhenRoleAdminIsProvidedInPublicRegister() throws Exception {
+    @DisplayName("Verify public register request ignoring any supplied role and creating ROLE_ENGINEER")
+    void shouldIgnoreRoleFieldInPublicRegisterAndCreateEngineer() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -226,5 +237,141 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                             """))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    @DisplayName("Verify ROLE_VIEWER has read-only access to incidents and stats, and receives 403 on mutations")
+    void shouldAllowViewerReadAccessAndRejectMutations() throws Exception {
+        userService.createUser(
+                new AdminCreateUserRequest("viewer_user", "viewer@example.com", "pass1234", Role.ROLE_VIEWER)
+        );
+        AuthResponse viewerAuth = authService.login(new LoginRequest("viewer_user", "pass1234"));
+        String token = "Bearer " + viewerAuth.getToken();
+
+        // 1. GET /incidents -> 200 OK
+        mockMvc.perform(get("/api/v1/incidents").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        // 2. GET /incidents/stats -> 200 OK
+        mockMvc.perform(get("/api/v1/incidents/stats").header("Authorization", token))
+                .andExpect(status().isOk());
+
+        // 3. POST /incidents -> 403 Forbidden
+        mockMvc.perform(post("/api/v1/incidents")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "title": "Unauthorized incident",
+                                "description": "Should fail",
+                                "priority": "CRITICAL",
+                                "location": "Noida"
+                            }
+                            """))
+                .andExpect(status().isForbidden());
+
+        // 4. PATCH /incidents/1/assign -> 403 Forbidden
+        mockMvc.perform(patch("/api/v1/incidents/1/assign")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "engineerId": 1
+                            }
+                            """))
+                .andExpect(status().isForbidden());
+
+        // 5. PATCH /incidents/1/status -> 403 Forbidden
+        mockMvc.perform(patch("/api/v1/incidents/1/status")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "status": "IN_PROGRESS"
+                            }
+                            """))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Verify Ownership RBAC: Engineer sees only their assigned incidents and can only update their own")
+    void shouldEnforceOwnershipBasedAccessForEngineers() throws Exception {
+        // Setup two engineers
+        Engineer eng1 = new Engineer();
+        eng1.setName("Engineer One");
+        eng1.setEmail("eng1@test.com");
+        eng1.setSpecialization("Fibre");
+        Engineer savedEng1 = engineerRepository.save(eng1);
+
+        Engineer eng2 = new Engineer();
+        eng2.setName("Engineer Two");
+        eng2.setEmail("eng2@test.com");
+        eng2.setSpecialization("Router");
+        Engineer savedEng2 = engineerRepository.save(eng2);
+
+        // Setup users linked to engineers
+        userService.createUser(new AdminCreateUserRequest("user_eng1", "user_eng1@test.com", "pass1234", Role.ROLE_ENGINEER, savedEng1.getId()));
+        userService.createUser(new AdminCreateUserRequest("user_eng2", "user_eng2@test.com", "pass1234", Role.ROLE_ENGINEER, savedEng2.getId()));
+
+        AuthResponse eng1Auth = authService.login(new LoginRequest("user_eng1", "pass1234"));
+        String tokenEng1 = "Bearer " + eng1Auth.getToken();
+
+        // Create incident assigned to Eng 1
+        Incident incidentEng1 = new Incident();
+        incidentEng1.setTitle("Eng1 ticket");
+        incidentEng1.setDescription("Description");
+        incidentEng1.setPriority(IncidentPriority.HIGH);
+        incidentEng1.setStatus(IncidentStatus.ASSIGNED);
+        incidentEng1.setLocation("Delhi");
+        incidentEng1.setAssignedEngineer(savedEng1);
+        Incident savedInc1 = incidentRepository.save(incidentEng1);
+
+        // Create incident assigned to Eng 2
+        Incident incidentEng2 = new Incident();
+        incidentEng2.setTitle("Eng2 ticket");
+        incidentEng2.setDescription("Description");
+        incidentEng2.setPriority(IncidentPriority.CRITICAL);
+        incidentEng2.setStatus(IncidentStatus.ASSIGNED);
+        incidentEng2.setLocation("Mumbai");
+        incidentEng2.setAssignedEngineer(savedEng2);
+        Incident savedInc2 = incidentRepository.save(incidentEng2);
+
+        // 1. GET /api/v1/incidents for Eng1 returns ONLY incident 1
+        mockMvc.perform(get("/api/v1/incidents").header("Authorization", tokenEng1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(savedInc1.getId()))
+                .andExpect(jsonPath("$.content[0].title").value("Eng1 ticket"));
+
+        // 2. GET /api/v1/incidents/mine returns ONLY incident 1
+        mockMvc.perform(get("/api/v1/incidents/mine").header("Authorization", tokenEng1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].id").value(savedInc1.getId()));
+
+        // 3. Eng1 updates their own incident -> 200 OK
+        mockMvc.perform(patch("/api/v1/incidents/" + savedInc1.getId() + "/status")
+                        .header("Authorization", tokenEng1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "status": "IN_PROGRESS"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("IN_PROGRESS"));
+
+        // 4. Eng1 tries to update Eng2's incident -> 403 Forbidden
+        mockMvc.perform(patch("/api/v1/incidents/" + savedInc2.getId() + "/status")
+                        .header("Authorization", tokenEng1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "status": "IN_PROGRESS"
+                            }
+                            """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.message").value("Engineers can only update status on incidents assigned to them"));
     }
 }
