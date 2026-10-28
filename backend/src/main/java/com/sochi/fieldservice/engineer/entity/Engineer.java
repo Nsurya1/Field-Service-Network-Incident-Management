@@ -1,4 +1,3 @@
-
 package com.sochi.fieldservice.engineer.entity;
 
 import jakarta.persistence.*;
@@ -21,7 +20,17 @@ public class Engineer {
     @Column(nullable = false, length = 100)
     private String specialization;
 
+    @Column(length = 30)
+    private String phone;
+
     @Column(nullable = false)
+    private boolean active = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "availability_status", nullable = false, length = 20)
+    private AvailabilityStatus availabilityStatus = AvailabilityStatus.AVAILABLE;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     public Engineer() {
@@ -29,11 +38,20 @@ public class Engineer {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        if (availabilityStatus == null) {
+            availabilityStatus = AvailabilityStatus.AVAILABLE;
+        }
     }
 
     public Long getId() {
         return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public String getName() {
@@ -60,7 +78,35 @@ public class Engineer {
         this.specialization = specialization;
     }
 
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public AvailabilityStatus getAvailabilityStatus() {
+        return availabilityStatus;
+    }
+
+    public void setAvailabilityStatus(AvailabilityStatus availabilityStatus) {
+        this.availabilityStatus = availabilityStatus;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

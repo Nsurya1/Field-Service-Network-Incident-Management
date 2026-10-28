@@ -76,13 +76,19 @@ Prevents engineer burnout and dispatch bottlenecks with strict concurrency contr
 - **Optimistic Locking (`@Version`):** `Incident` entities use a JPA `@Version` column (`version BIGINT NOT NULL DEFAULT 0`) to detect and reject concurrent lost-update conflicts (`OptimisticLockingFailureException`).
 - Attempting to assign an engineer at capacity immediately rejects with **HTTP 409 Conflict**.
 
-### 4. Immutable Audit Trail & Event Timeline
+### 4. Field Technician Domain Model & Dispatch Guardrails
+- **No Entity Leakage:** `EngineerController` returns encapsulated `EngineerResponse` DTOs containing `id`, `name`, `email`, `phone`, `specialization`, `active`, `availabilityStatus` (`AVAILABLE`, `BUSY`, `OFF_DUTY`), `currentWorkload`, and `createdAt`.
+- **Real-Time Workload Computation:** Each engineer response includes their `currentWorkload` count of active tickets (`ASSIGNED` and `IN_PROGRESS`) calculated dynamically via database aggregation.
+- **Availability & Active Guardrails:** Inactive (`active = false`) or off-duty (`availabilityStatus = OFF_DUTY`) technicians are strictly blocked from dispatch assignment with **HTTP 400 Bad Request**.
+- **Technician Profile & Status Management:** Authorized dispatchers and admins can modify technician specializations/availability (`PUT /api/v1/engineers/{id}`) and toggle active status (`PATCH /api/v1/engineers/{id}/active`).
+
+### 5. Immutable Audit Trail & Event Timeline
 Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`) automatically records a chronological event log in `incident_history`, accessible via `GET /api/v1/incidents/{id}/history`.
 
-### 5. High-Performance Dashboard Analytics
+### 6. High-Performance Dashboard Analytics
 Aggregated metrics (`GET /api/v1/incidents/stats`) calculate total volume, status distribution, active tickets, and breached SLAs using database-level aggregate SQL queries.
 
-### 6. Role-Based Access Control (RBAC) & Ownership Security
+### 7. Role-Based Access Control (RBAC) & Ownership Security
 - **ROLE_ADMIN:** Full system access (create engineers, reassign incidents, manage users, view stats).
 - **ROLE_MANAGER:** Team dispatch (create & assign incidents, view engineers and analytics).
 - **ROLE_ENGINEER:** Field technician with ownership-based access control:
@@ -146,9 +152,11 @@ The codebase is hardened by **185 automated unit and integration tests** verifie
 ### Engineer Endpoints (Secured)
 | Method | Endpoint | Description | Role Required |
 | :--- | :--- | :--- | :--- |
-| `GET` | `/api/v1/engineers` | List all field engineers | ADMIN, MANAGER |
-| `GET` | `/api/v1/engineers/{id}` | Retrieve engineer details | ADMIN, MANAGER |
+| `GET` | `/api/v1/engineers` | List all field engineers with current workload | ADMIN, MANAGER |
+| `GET` | `/api/v1/engineers/{id}` | Retrieve engineer details with current workload | ADMIN, MANAGER |
 | `POST` | `/api/v1/engineers` | Register a new technician | ADMIN |
+| `PUT` | `/api/v1/engineers/{id}` | Update engineer profile & availability status | ADMIN, MANAGER |
+| `PATCH`| `/api/v1/engineers/{id}/active` | Toggle engineer active status | ADMIN, MANAGER |
 
 ---
 

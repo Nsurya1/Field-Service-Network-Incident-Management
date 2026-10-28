@@ -1,4 +1,3 @@
-
 package com.sochi.fieldservice.engineer.dto;
 
 import jakarta.validation.constraints.Email;
@@ -20,7 +19,21 @@ public class CreateEngineerRequest {
     @Size(max = 100, message = "Specialization cannot exceed 100 characters")
     private String specialization;
 
+    @Size(max = 30, message = "Phone cannot exceed 30 characters")
+    private String phone;
+
     public CreateEngineerRequest() {
+    }
+
+    public CreateEngineerRequest(String name, String email, String specialization) {
+        this(name, email, specialization, null);
+    }
+
+    public CreateEngineerRequest(String name, String email, String specialization, String phone) {
+        this.name = name;
+        this.email = email;
+        this.specialization = specialization;
+        this.phone = phone;
     }
 
     public String getName() {
@@ -45,5 +58,13 @@ public class CreateEngineerRequest {
 
     public void setSpecialization(String specialization) {
         this.specialization = specialization;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 }

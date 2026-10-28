@@ -1,5 +1,6 @@
 package com.sochi.fieldservice.integration;
 
+import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.incident.IncidentService;
@@ -488,5 +489,52 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
 
         assertEquals(IncidentStatus.IN_PROGRESS, reassigned.getStatus(), "Status must remain IN_PROGRESS on reassignment");
         assertEquals(savedEng2.getId(), reassigned.getAssignedEngineer().getId());
+    }
+
+    @Test
+    @DisplayName("Verify assigning incident to an inactive engineer is blocked with HTTP 400")
+    void shouldBlockAssignmentToInactiveEngineer() {
+        Engineer inactiveEng = new Engineer();
+        inactiveEng.setName("Inactive Integration Tech");
+        inactiveEng.setEmail("inactive.integration@test.com");
+        inactiveEng.setSpecialization("Core");
+        inactiveEng.setActive(false);
+        Engineer savedEng = engineerRepository.save(inactiveEng);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Inactive assignment target");
+        req.setDescription("Desc");
+        req.setPriority(IncidentPriority.MEDIUM);
+        Incident incident = incidentService.createIncident(req);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.assignIncident(incident.getId(), savedEng.getId()));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("inactive"));
+    }
+
+    @Test
+    @DisplayName("Verify assigning incident to an off-duty engineer is blocked with HTTP 400")
+    void shouldBlockAssignmentToOffDutyEngineer() {
+        Engineer offDutyEng = new Engineer();
+        offDutyEng.setName("OffDuty Integration Tech");
+        offDutyEng.setEmail("offduty.integration@test.com");
+        offDutyEng.setSpecialization("Core");
+        offDutyEng.setActive(true);
+        offDutyEng.setAvailabilityStatus(AvailabilityStatus.OFF_DUTY);
+        Engineer savedEng = engineerRepository.save(offDutyEng);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("OffDuty assignment target");
+        req.setDescription("Desc");
+        req.setPriority(IncidentPriority.MEDIUM);
+        Incident incident = incidentService.createIncident(req);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.assignIncident(incident.getId(), savedEng.getId()));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("off-duty"));
     }
 }

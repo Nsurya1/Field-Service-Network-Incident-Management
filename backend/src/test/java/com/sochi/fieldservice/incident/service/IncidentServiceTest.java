@@ -25,6 +25,7 @@ import static org.mockito.Mockito.*;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
+import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 
 import org.springframework.data.domain.Page;
@@ -244,6 +245,49 @@ class IncidentServiceTest {
     }
 
     @Test
+    void assignIncidentShouldThrow400WhenEngineerIsInactive() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.OPEN);
+
+        Engineer engineer = new Engineer();
+        engineer.setName("Inactive Tech");
+        engineer.setActive(false);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(engineerService.getEngineerByIdForUpdate(2L)).thenReturn(engineer);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.assignIncident(1L, 2L));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("inactive"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void assignIncidentShouldThrow400WhenEngineerIsOffDuty() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.OPEN);
+
+        Engineer engineer = new Engineer();
+        engineer.setName("OffDuty Tech");
+        engineer.setActive(true);
+        engineer.setAvailabilityStatus(AvailabilityStatus.OFF_DUTY);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(engineerService.getEngineerByIdForUpdate(2L)).thenReturn(engineer);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.assignIncident(1L, 2L));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("off-duty"));
+        verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
     void assignIncidentShouldThrow400WhenIncidentIsClosed() {
         Incident incident = new Incident();
         incident.setTitle("Router failure");
@@ -292,8 +336,11 @@ class IncidentServiceTest {
 
     @Test
     void assignIncidentShouldAllowReassignmentToSameEngineer() {
-        Engineer engineer = mock(Engineer.class);
-        when(engineer.getId()).thenReturn(2L);
+        Engineer engineer = new Engineer();
+        engineer.setName("Test Engineer");
+        engineer.setActive(true);
+        engineer.setAvailabilityStatus(AvailabilityStatus.AVAILABLE);
+        ReflectionTestUtils.setField(engineer, "id", 2L);
 
         Incident incident = new Incident();
         incident.setTitle("Router failure");
@@ -319,10 +366,15 @@ class IncidentServiceTest {
 
     @Test
     void assignIncidentShouldAllowReassignmentToDifferentEngineerWhenCapacityAvailable() {
-        Engineer oldEngineer = mock(Engineer.class);
-        when(oldEngineer.getId()).thenReturn(5L);
+        Engineer oldEngineer = new Engineer();
+        oldEngineer.setName("Old Engineer");
+        ReflectionTestUtils.setField(oldEngineer, "id", 5L);
 
-        Engineer newEngineer = mock(Engineer.class);
+        Engineer newEngineer = new Engineer();
+        newEngineer.setName("New Engineer");
+        newEngineer.setActive(true);
+        newEngineer.setAvailabilityStatus(AvailabilityStatus.AVAILABLE);
+        ReflectionTestUtils.setField(newEngineer, "id", 2L);
 
         Incident incident = new Incident();
         incident.setTitle("Router failure");

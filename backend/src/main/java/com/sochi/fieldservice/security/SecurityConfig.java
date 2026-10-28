@@ -88,6 +88,8 @@ public class SecurityConfig {
 
                         // Engineer management permissions
                         .requestMatchers(HttpMethod.POST, "/api/v1/engineers").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/engineers/**").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/engineers/*/active").hasAnyRole("ADMIN", "MANAGER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/engineers/**").hasAnyRole("ADMIN", "MANAGER")
 
                         // Incident management permissions

@@ -1,5 +1,6 @@
 package com.sochi.fieldservice.config;
 
+import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.incident.entity.Incident;
@@ -139,25 +140,28 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         List<Engineer> engineers = new ArrayList<>();
-        engineers.add(createEngineer("Rajesh Sharma", "rajesh.sharma@telecom.net", "Fibre"));
-        engineers.add(createEngineer("Priya Patel", "priya.patel@telecom.net", "Router"));
-        engineers.add(createEngineer("Amit Kumar", "amit.kumar@telecom.net", "Wireless"));
-        engineers.add(createEngineer("Sunita Rao", "sunita.rao@telecom.net", "Power"));
-        engineers.add(createEngineer("Vikram Singh", "vikram.singh@telecom.net", "Fibre"));
-        engineers.add(createEngineer("Ananya Desai", "ananya.desai@telecom.net", "Router"));
-        engineers.add(createEngineer("Mohammed Ali", "mohammed.ali@telecom.net", "Wireless"));
-        engineers.add(createEngineer("Deepa Nair", "deepa.nair@telecom.net", "Power"));
+        engineers.add(createEngineer("Rajesh Sharma", "rajesh.sharma@telecom.net", "Fibre", "+91-98201-11223", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Priya Patel", "priya.patel@telecom.net", "Router", "+91-98202-22334", AvailabilityStatus.BUSY));
+        engineers.add(createEngineer("Amit Kumar", "amit.kumar@telecom.net", "Wireless", "+91-98203-33445", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Sunita Rao", "sunita.rao@telecom.net", "Power", "+91-98204-44556", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Vikram Singh", "vikram.singh@telecom.net", "Fibre", "+91-98205-55667", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Ananya Desai", "ananya.desai@telecom.net", "Router", "+91-98206-66778", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Mohammed Ali", "mohammed.ali@telecom.net", "Wireless", "+91-98207-77889", AvailabilityStatus.AVAILABLE));
+        engineers.add(createEngineer("Deepa Nair", "deepa.nair@telecom.net", "Power", "+91-98208-88990", AvailabilityStatus.OFF_DUTY));
 
         List<Engineer> saved = engineerRepository.saveAll(engineers);
         log.info("Seeded {} field engineers across Fibre, Router, Wireless, and Power specializations.", saved.size());
         return saved;
     }
 
-    private Engineer createEngineer(String name, String email, String specialization) {
+    private Engineer createEngineer(String name, String email, String specialization, String phone, AvailabilityStatus availabilityStatus) {
         Engineer engineer = new Engineer();
         engineer.setName(name);
         engineer.setEmail(email);
         engineer.setSpecialization(specialization);
+        engineer.setPhone(phone);
+        engineer.setActive(true);
+        engineer.setAvailabilityStatus(availabilityStatus);
         return engineer;
     }
 

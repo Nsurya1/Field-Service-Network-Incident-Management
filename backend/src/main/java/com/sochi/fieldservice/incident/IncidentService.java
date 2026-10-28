@@ -1,5 +1,6 @@
 package com.sochi.fieldservice.incident;
 
+import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.service.EngineerService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
@@ -101,6 +102,15 @@ public class IncidentService {
 
         // Pessimistic write lock to serialize concurrent assignments to the same engineer and protect workload cap
         Engineer engineer = engineerService.getEngineerByIdForUpdate(engineerId);
+
+        if (!engineer.isActive() || engineer.getAvailabilityStatus() == AvailabilityStatus.OFF_DUTY) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    String.format("Cannot assign incident to engineer %s because they are %s",
+                            engineer.getName(),
+                            !engineer.isActive() ? "inactive" : "off-duty")
+            );
+        }
 
         boolean isAlreadyAssignedToThisEngineer = incident.getAssignedEngineer() != null
                 && engineerId.equals(incident.getAssignedEngineer().getId());

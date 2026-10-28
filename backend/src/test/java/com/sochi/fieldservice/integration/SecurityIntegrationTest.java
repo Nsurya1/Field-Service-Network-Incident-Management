@@ -423,4 +423,65 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.status").value("OPEN"))
                 .andExpect(jsonPath("$.assignedEngineerId").doesNotExist());
     }
+
+    @Test
+    @DisplayName("Verify RBAC on PUT /engineers/{id} and PATCH /engineers/{id}/active: ADMIN and MANAGER allowed, ENGINEER and VIEWER forbidden")
+    void shouldEnforceRbacOnEngineerUpdateAndActiveEndpoints() throws Exception {
+        User admin = userRepository.save(new User("admin_eng_rbac", "admin_eng@test.com", "pass", Role.ROLE_ADMIN));
+        User manager = userRepository.save(new User("mgr_eng_rbac", "mgr_eng@test.com", "pass", Role.ROLE_MANAGER));
+        User engineer = userRepository.save(new User("tech_eng_rbac", "tech_eng@test.com", "pass", Role.ROLE_ENGINEER));
+        User viewer = userRepository.save(new User("view_eng_rbac", "view_eng@test.com", "pass", Role.ROLE_VIEWER));
+
+        String adminToken = "Bearer " + jwtUtils.generateToken(admin);
+        String managerToken = "Bearer " + jwtUtils.generateToken(manager);
+        String engToken = "Bearer " + jwtUtils.generateToken(engineer);
+        String viewerToken = "Bearer " + jwtUtils.generateToken(viewer);
+
+        Engineer tech = new Engineer();
+        tech.setName("RBAC Target Tech");
+        tech.setEmail("rbactarget@test.com");
+        tech.setSpecialization("Core Fibre");
+        tech = engineerRepository.save(tech);
+        Long id = tech.getId();
+
+        String updateJson = """
+            {
+                "name": "Updated Tech",
+                "phone": "+91-98765-00000",
+                "specialization": "DWDM",
+                "availabilityStatus": "BUSY"
+            }
+            """;
+
+        // PUT unauthenticated -> 401
+        mockMvc.perform(put("/api/v1/engineers/" + id).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+                .andExpect(status().isUnauthorized());
+
+        // PUT ENGINEER -> 403
+        mockMvc.perform(put("/api/v1/engineers/" + id).header("Authorization", engToken).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+                .andExpect(status().isForbidden());
+
+        // PUT VIEWER -> 403
+        mockMvc.perform(put("/api/v1/engineers/" + id).header("Authorization", viewerToken).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+                .andExpect(status().isForbidden());
+
+        // PUT MANAGER -> 200 OK
+        mockMvc.perform(put("/api/v1/engineers/" + id).header("Authorization", managerToken).contentType(MediaType.APPLICATION_JSON).content(updateJson))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Updated Tech"))
+                .andExpect(jsonPath("$.availabilityStatus").value("BUSY"));
+
+        // PATCH /active unauthenticated -> 401
+        mockMvc.perform(patch("/api/v1/engineers/" + id + "/active?active=false"))
+                .andExpect(status().isUnauthorized());
+
+        // PATCH /active ENGINEER -> 403
+        mockMvc.perform(patch("/api/v1/engineers/" + id + "/active?active=false").header("Authorization", engToken))
+                .andExpect(status().isForbidden());
+
+        // PATCH /active ADMIN -> 200 OK
+        mockMvc.perform(patch("/api/v1/engineers/" + id + "/active?active=false").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.active").value(false));
+    }
 }
