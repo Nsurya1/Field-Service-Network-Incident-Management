@@ -53,7 +53,7 @@ A robust, enterprise-grade field service and network incident dispatch managemen
 Prevents invalid transitions through domain-encapsulated logic (`canTransitionTo`):
 - `OPEN` $\rightarrow$ `ASSIGNED`, `IN_PROGRESS`, `CLOSED`
 - `ASSIGNED` $\rightarrow$ `IN_PROGRESS`, `OPEN` (unassign), `CLOSED`
-- `IN_PROGRESS` $\rightarrow$ `RESOLVED`, `ASSIGNED`, `CLOSED`
+- `IN_PROGRESS` $\rightarrow$ `RESOLVED`, `ASSIGNED`
 - `RESOLVED` $\rightarrow$ `CLOSED`, `IN_PROGRESS` (re-open)
 - `CLOSED` $\rightarrow$ Terminal state; cannot be modified or assigned.
 
@@ -238,15 +238,18 @@ View the generated HTML coverage report at:
 
 ---
 
-## 👤 Sample Login Accounts
+## 👤 Sample Login Accounts & Demo Seed Data
 
-When testing the application, register an account via the UI or use the following pre-configured roles:
-
-| Username | Default Password | Role | Description |
-| :--- | :--- | :--- | :--- |
-| `admin` | `password123` | `ROLE_ADMIN` | Full administrative capabilities |
-| `dispatcher` | `password123` | `ROLE_MANAGER` | Dispatch and ticket assignment |
-| `technician` | `password123` | `ROLE_ENGINEER` | Field ticket resolution |
+In the development profile (`dev`), the application includes an idempotent `DataSeeder` (`CommandLineRunner`) that automatically seeds:
+- **3 Core User Accounts** (with default password `password123`, overridable via `APP_SEED_PASSWORD`):
+  | Username | Default Password | Role | Description |
+  | :--- | :--- | :--- | :--- |
+  | `admin` | `password123` | `ROLE_ADMIN` | Full administrative capabilities |
+  | `dispatcher` | `password123` | `ROLE_MANAGER` | Dispatch and ticket assignment |
+  | `technician` | `password123` | `ROLE_ENGINEER` | Field ticket resolution |
+- **8 Field Engineers** across telecommunications specializations (`Fibre`, `Router`, `Wireless`, and `Power`).
+- **40 Realistic Network Incidents** across all statuses (`OPEN`, `ASSIGNED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`) and priorities (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`), including active and resolved SLA breaches to populate dashboard analytics immediately.
+- **Idempotency Guarantee**: Running the server multiple times detects existing records and safely skips without duplicating rows. Disabled in production and test profiles.
 
 ---
 
