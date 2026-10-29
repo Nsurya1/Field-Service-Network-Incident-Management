@@ -17,12 +17,19 @@ WORKDIR /app
 
 # Run as non-root user for container security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Install curl for container health checks
+RUN apk add --no-cache curl
+
 USER appuser:appgroup
 
 # Copy the built JAR from builder stage
-COPY --from=builder /workspace/target/fieldservice-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=builder /workspace/target/*.jar app.jar
 
 EXPOSE 8081
 
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD curl -f http://localhost:8081/actuator/health || exit 1
+
 # JVM flags optimized for container memory constraints
-ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]
