@@ -114,11 +114,11 @@ Aggregated metrics (`GET /api/v1/incidents/stats`) calculate total volume, statu
 
 ## 🧪 Test Coverage & Quality Assurance
 
-The codebase is hardened by **185 automated unit and integration tests** verified by JaCoCo:
+The codebase is hardened by **284 automated unit and integration tests** verified by JaCoCo:
 
-- **Overall Instruction Coverage:** **>99.3%**
-- **Overall Branch Coverage:** **>90.0%**
-- **Integration Tests:** Tested against real PostgreSQL 17 test containers using Testcontainers, verifying Flyway schema migrations (V1, V2, V3), relational foreign keys, `@PrePersist` hooks, transactions, and security filter chains.
+- **Overall Instruction Coverage:** **>97.1%**
+- **Overall Branch Coverage:** **>83.4%**
+- **Integration Tests:** Tested against real PostgreSQL 17 test containers using Testcontainers, verifying Flyway schema migrations (V1 through V7), relational foreign keys, JPA Specifications, pessimistic/optimistic locks, transactions, and security filter chains.
 
 | Component / Layer | Instruction Coverage | Branch Coverage | Test Class |
 | :--- | :---: | :---: | :--- |
@@ -152,9 +152,10 @@ The codebase is hardened by **185 automated unit and integration tests** verifie
 | Method | Endpoint | Description | Role Required |
 | :--- | :--- | :--- | :--- |
 | `GET` | `/api/v1/incidents/stats` | High-level metrics & SLA breaches | ADMIN, MANAGER, ENGINEER, VIEWER |
-| `GET` | `/api/v1/incidents` | Filterable & paginated incident list | ADMIN, MANAGER, ENGINEER, VIEWER |
-| `GET` | `/api/v1/incidents/mine` | Authenticated engineer's assigned tickets | ENGINEER |
+| `GET` | `/api/v1/incidents` | Specification search & multi-attribute filter list (`search`, `status`, `priority`, `assignedEngineerId`, `createdFrom`, `createdTo`, `breachedOnly`, `sort`) | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `GET` | `/api/v1/incidents/mine` | Authenticated engineer's assigned tickets with specification filters | ENGINEER |
 | `GET` | `/api/v1/incidents/{id}` | Retrieve incident details | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `PUT` | `/api/v1/incidents/{id}` | Edit title, description, location, priority (priority change recalculates SLA from `createdAt` & records audit history) | ADMIN, MANAGER |
 | `GET` | `/api/v1/incidents/{id}/history` | Chronological audit trail | ADMIN, MANAGER, ENGINEER, VIEWER |
 | `POST` | `/api/v1/incidents` | Create a new network incident | ADMIN, MANAGER |
 | `PATCH`| `/api/v1/incidents/{id}/assign` | Assign incident to field engineer | ADMIN, MANAGER |

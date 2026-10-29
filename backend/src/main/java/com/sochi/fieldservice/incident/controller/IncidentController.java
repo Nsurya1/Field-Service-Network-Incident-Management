@@ -5,10 +5,12 @@ import com.sochi.fieldservice.incident.dto.AssignIncidentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
+import com.sochi.fieldservice.incident.dto.IncidentFilterCriteria;
 import com.sochi.fieldservice.incident.dto.IncidentHistoryResponse;
 import com.sochi.fieldservice.incident.dto.IncidentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
@@ -21,11 +23,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @RestController
@@ -55,10 +60,16 @@ public class IncidentController {
 
     @GetMapping
     public Page<IncidentResponse> getAllIncidents(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) IncidentStatus status,
             @RequestParam(required = false) IncidentPriority priority,
+            @RequestParam(required = false) Long assignedEngineerId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdTo,
+            @RequestParam(required = false) Boolean breachedOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
             Principal principal) {
 
         if (page < 0 || size < 1 || size > 100) {
@@ -68,27 +79,35 @@ public class IncidentController {
             );
         }
 
-        Pageable pageable = PageRequest.of(
-                page,
-                size,
-                Sort.by(Sort.Direction.DESC, "createdAt")
+        Pageable pageable = PageRequest.of(page, size, parseSort(sort));
+
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria(
+                search,
+                status,
+                priority,
+                assignedEngineerId,
+                createdFrom,
+                createdTo,
+                breachedOnly
         );
 
         String username = principal != null ? principal.getName() : null;
 
-        Page<Incident> result = (username != null)
-                ? incidentService.getIncidents(status, priority, pageable, username)
-                : incidentService.getIncidents(status, priority, pageable);
-
+        Page<Incident> result = incidentService.getIncidents(criteria, pageable, username);
         return result.map(IncidentResponse::new);
     }
 
     @GetMapping("/mine")
     public Page<IncidentResponse> getMyIncidents(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) IncidentStatus status,
             @RequestParam(required = false) IncidentPriority priority,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime createdTo,
+            @RequestParam(required = false) Boolean breachedOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
             Principal principal) {
 
         if (page < 0 || size < 1 || size > 100) {
@@ -102,15 +121,30 @@ public class IncidentController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required");
         }
 
-        Pageable pageable = PageRequest.of(
-                page,
-                size,
-                Sort.by(Sort.Direction.DESC, "createdAt")
+        Pageable pageable = PageRequest.of(page, size, parseSort(sort));
+
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria(
+                search,
+                status,
+                priority,
+                null,
+                createdFrom,
+                createdTo,
+                breachedOnly
         );
 
         return incidentService
-                .getMyIncidents(status, priority, pageable, principal.getName())
+                .getMyIncidents(criteria, pageable, principal.getName())
                 .map(IncidentResponse::new);
+    }
+
+    @PutMapping("/{id}")
+    public IncidentResponse updateIncident(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateIncidentRequest request,
+            Principal principal) {
+        String username = principal != null ? principal.getName() : null;
+        return new IncidentResponse(incidentService.updateIncident(id, request, username));
     }
 
     @GetMapping("/stats")
@@ -196,5 +230,29 @@ public class IncidentController {
     @GetMapping("/{id}/timeline")
     public List<TimelineItemResponse> getTimeline(@PathVariable Long id) {
         return incidentService.getTimeline(id);
+    }
+
+    private Sort parseSort(String sortParam) {
+        if (sortParam == null || sortParam.isBlank()) {
+            return Sort.by(Sort.Direction.DESC, "createdAt");
+        }
+
+        List<Sort.Order> orders = new ArrayList<>();
+        String[] parts = sortParam.split(",");
+        if (parts.length == 1) {
+            orders.add(new Sort.Order(Sort.Direction.ASC, parts[0].trim()));
+        } else if (parts.length == 2 && ("asc".equalsIgnoreCase(parts[1].trim()) || "desc".equalsIgnoreCase(parts[1].trim()))) {
+            Sort.Direction direction = "asc".equalsIgnoreCase(parts[1].trim()) ? Sort.Direction.ASC : Sort.Direction.DESC;
+            orders.add(new Sort.Order(direction, parts[0].trim()));
+        } else {
+            for (int i = 0; i < parts.length; i += 2) {
+                String prop = parts[i].trim();
+                Sort.Direction direction = (i + 1 < parts.length && "asc".equalsIgnoreCase(parts[i + 1].trim()))
+                        ? Sort.Direction.ASC
+                        : Sort.Direction.DESC;
+                orders.add(new Sort.Order(direction, prop));
+            }
+        }
+        return orders.isEmpty() ? Sort.by(Sort.Direction.DESC, "createdAt") : Sort.by(orders);
     }
 }

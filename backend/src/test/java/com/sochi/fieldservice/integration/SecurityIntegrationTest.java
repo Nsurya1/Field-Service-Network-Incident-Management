@@ -27,6 +27,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -681,5 +683,82 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$[?(@.itemType == 'COMMENT')]").exists());
+    }
+
+    @Test
+    @DisplayName("Verify PUT /api/v1/incidents/{id} RBAC: ADMIN/MANAGER allowed, ENGINEER/VIEWER forbidden, unauthenticated 401")
+    void shouldEnforceRbacOnPutIncidentEndpoint() throws Exception {
+        Incident incident = new Incident();
+        incident.setTitle("Core Link Flapping");
+        incident.setDescription("Interface GigabitEthernet0/0 goes down intermittently");
+        incident.setPriority(IncidentPriority.HIGH);
+        incident.setLocation("Datacenter Rack 5");
+        incident.setStatus(IncidentStatus.OPEN);
+        incident.setSlaDeadline(LocalDateTime.now().plusHours(8));
+        Incident savedInc = incidentRepository.save(incident);
+
+        User adminUser = userRepository.save(new User("admin_put", "admin@put.com", "pass", Role.ROLE_ADMIN, null));
+        User managerUser = userRepository.save(new User("manager_put", "manager@put.com", "pass", Role.ROLE_MANAGER, null));
+        User engUser = userRepository.save(new User("eng_put", "eng@put.com", "pass", Role.ROLE_ENGINEER, null));
+        User viewerUser = userRepository.save(new User("viewer_put", "viewer@put.com", "pass", Role.ROLE_VIEWER, null));
+
+        String adminToken = "Bearer " + jwtUtils.generateToken(adminUser);
+        String managerToken = "Bearer " + jwtUtils.generateToken(managerUser);
+        String engToken = "Bearer " + jwtUtils.generateToken(engUser);
+        String viewerToken = "Bearer " + jwtUtils.generateToken(viewerUser);
+
+        String updatePayload = """
+            {
+                "title": "Core Link Flapping - Escalated",
+                "description": "Interface GigabitEthernet0/0 fully degraded",
+                "location": "Datacenter Rack 5, Slot 2",
+                "priority": "CRITICAL"
+            }
+            """;
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(put("/api/v1/incidents/" + savedInc.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatePayload))
+                .andExpect(status().isUnauthorized());
+
+        // 2. ENGINEER -> 403 Forbidden
+        mockMvc.perform(put("/api/v1/incidents/" + savedInc.getId())
+                        .header("Authorization", engToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatePayload))
+                .andExpect(status().isForbidden());
+
+        // 3. VIEWER -> 403 Forbidden
+        mockMvc.perform(put("/api/v1/incidents/" + savedInc.getId())
+                        .header("Authorization", viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatePayload))
+                .andExpect(status().isForbidden());
+
+        // 4. MANAGER -> 200 OK
+        mockMvc.perform(put("/api/v1/incidents/" + savedInc.getId())
+                        .header("Authorization", managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updatePayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Core Link Flapping - Escalated"))
+                .andExpect(jsonPath("$.priority").value("CRITICAL"));
+
+        // 5. ADMIN -> 200 OK
+        mockMvc.perform(put("/api/v1/incidents/" + savedInc.getId())
+                        .header("Authorization", adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "title": "Core Link Flapping - Resolved by Admin",
+                                "description": "Interface repaired",
+                                "location": "Datacenter Rack 5, Slot 2",
+                                "priority": "LOW"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Core Link Flapping - Resolved by Admin"))
+                .andExpect(jsonPath("$.priority").value("LOW"));
     }
 }

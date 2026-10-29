@@ -9,8 +9,9 @@ import CreateIncidentModal from './components/CreateIncidentModal';
 import AssignEngineerModal from './components/AssignEngineerModal';
 import StatusTransitionModal from './components/StatusTransitionModal';
 import EngineerManagementModal from './components/EngineerManagementModal';
+import EditIncidentModal from './components/EditIncidentModal';
 import AuthView from './components/AuthView';
-import { Filter, RefreshCw, AlertCircle } from 'lucide-react';
+import { Filter, RefreshCw, AlertCircle, Search, AlertTriangle } from 'lucide-react';
 
 function IncidentDashboard() {
   const { user } = useAuth();
@@ -27,11 +28,14 @@ function IncidentDashboard() {
   const [tableLoading, setTableLoading] = useState(true);
 
   // Filters
+  const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [breachedOnly, setBreachedOnly] = useState(false);
 
   // Modals
   const [detailIncident, setDetailIncident] = useState(null);
+  const [editIncident, setEditIncident] = useState(null);
   const [assignIncident, setAssignIncident] = useState(null);
   const [statusIncident, setStatusIncident] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -56,12 +60,12 @@ function IncidentDashboard() {
     try {
       setTableLoading(true);
       setFetchError('');
-      const data = await incidentService.getIncidents(
-        statusFilter || null,
-        priorityFilter || null,
-        page,
-        pageSize
-      );
+      const data = await incidentService.getIncidents({
+        search: searchTerm.trim() || null,
+        status: statusFilter || null,
+        priority: priorityFilter || null,
+        breachedOnly: breachedOnly ? true : null,
+      }, null, page, pageSize);
       setIncidents(data.content || []);
       setTotalPages(data.totalPages || 0);
       setTotalElements(data.totalElements || 0);
@@ -71,7 +75,7 @@ function IncidentDashboard() {
     } finally {
       setTableLoading(false);
     }
-  }, [statusFilter, priorityFilter, page, pageSize]);
+  }, [searchTerm, statusFilter, priorityFilter, breachedOnly, page, pageSize]);
 
   const refreshAll = useCallback(() => {
     loadStats();
@@ -86,6 +90,16 @@ function IncidentDashboard() {
     loadIncidents();
   }, [loadIncidents]);
 
+  const hasActiveFilters = Boolean(searchTerm.trim() || statusFilter || priorityFilter || breachedOnly);
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setPriorityFilter('');
+    setBreachedOnly(false);
+    setPage(0);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar
@@ -99,12 +113,25 @@ function IncidentDashboard() {
 
         {/* Action & Filter Bar */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
             <div className="flex items-center text-xs font-semibold text-slate-500 mr-1">
               <Filter className="w-3.5 h-3.5 mr-1.5" />
               Filters:
             </div>
 
+            {/* Free-text Search */}
+            <div className="relative flex-1 min-w-[180px] max-w-xs">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+                placeholder="Search title, description, location..."
+                className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
+              />
+            </div>
+
+            {/* Status Dropdown */}
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
@@ -118,6 +145,7 @@ function IncidentDashboard() {
               <option value="CLOSED">CLOSED</option>
             </select>
 
+            {/* Priority Dropdown */}
             <select
               value={priorityFilter}
               onChange={(e) => { setPriorityFilter(e.target.value); setPage(0); }}
@@ -130,10 +158,23 @@ function IncidentDashboard() {
               <option value="LOW">LOW</option>
             </select>
 
-            {(statusFilter || priorityFilter) && (
+            {/* Breached Only Filter */}
+            <button
+              onClick={() => { setBreachedOnly(!breachedOnly); setPage(0); }}
+              className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                breachedOnly
+                  ? 'bg-rose-50 border-rose-300 text-rose-700 font-semibold'
+                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <AlertTriangle className={`w-3.5 h-3.5 mr-1.5 ${breachedOnly ? 'text-rose-600' : 'text-slate-400'}`} />
+              Breached Only
+            </button>
+
+            {hasActiveFilters && (
               <button
-                onClick={() => { setStatusFilter(''); setPriorityFilter(''); setPage(0); }}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 ml-1"
+                onClick={resetFilters}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 ml-1 cursor-pointer"
               >
                 Reset filters
               </button>
@@ -142,7 +183,7 @@ function IncidentDashboard() {
 
           <button
             onClick={refreshAll}
-            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 transition"
+            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 transition cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
             Refresh
@@ -180,6 +221,17 @@ function IncidentDashboard() {
       <IncidentDetailModal
         incident={detailIncident}
         onClose={() => setDetailIncident(null)}
+        onEdit={(inc) => {
+          setDetailIncident(null);
+          setEditIncident(inc);
+        }}
+      />
+
+      <EditIncidentModal
+        incident={editIncident}
+        isOpen={!!editIncident}
+        onClose={() => setEditIncident(null)}
+        onSuccess={refreshAll}
       />
 
       <AssignEngineerModal

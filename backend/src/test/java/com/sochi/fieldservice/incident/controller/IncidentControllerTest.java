@@ -5,8 +5,10 @@ import com.sochi.fieldservice.incident.dto.AssignIncidentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
+import com.sochi.fieldservice.incident.dto.IncidentFilterCriteria;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
@@ -25,6 +27,7 @@ import org.springframework.context.annotation.FilterType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -37,6 +40,7 @@ import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -62,7 +66,7 @@ class IncidentControllerTest {
 
         Page<Incident> emptyPage = new PageImpl<>(List.of(), pageable, 0);
 
-        when(incidentService.getIncidents(null, null, pageable)).thenReturn(emptyPage);
+        when(incidentService.getIncidents(any(IncidentFilterCriteria.class), eq(pageable), any())).thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/v1/incidents"))
                 .andExpect(status().isOk())
@@ -70,7 +74,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.content").isEmpty())
                 .andExpect(jsonPath("$.totalElements").value(0));
 
-        verify(incidentService).getIncidents(null, null, pageable);
+        verify(incidentService).getIncidents(any(IncidentFilterCriteria.class), eq(pageable), any());
     }
 
     @Test
@@ -333,7 +337,7 @@ class IncidentControllerTest {
         PageRequest pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<Incident> emptyPage = new PageImpl<>(List.of(), pageable, 0);
 
-        when(incidentService.getMyIncidents(null, null, pageable, "tech_user")).thenReturn(emptyPage);
+        when(incidentService.getMyIncidents(any(IncidentFilterCriteria.class), eq(pageable), eq("tech_user"))).thenReturn(emptyPage);
 
         mockMvc.perform(get("/api/v1/incidents/mine")
                         .principal(() -> "tech_user"))
@@ -341,7 +345,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.content").isArray())
                 .andExpect(jsonPath("$.totalElements").value(0));
 
-        verify(incidentService).getMyIncidents(null, null, pageable, "tech_user");
+        verify(incidentService).getMyIncidents(any(IncidentFilterCriteria.class), eq(pageable), eq("tech_user"));
     }
 
     @Test
@@ -518,5 +522,76 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$[0].actor").value("dispatcher"));
 
         verify(incidentService).getTimeline(1L);
+    }
+
+    @Test
+    void shouldUpdateIncident() throws Exception {
+        Incident incident = new Incident();
+        incident.setTitle("Updated Title");
+        incident.setDescription("Updated Desc");
+        incident.setLocation("Updated Loc");
+        incident.setPriority(IncidentPriority.CRITICAL);
+        incident.setStatus(IncidentStatus.OPEN);
+
+        when(incidentService.updateIncident(eq(1L), any(UpdateIncidentRequest.class), any()))
+                .thenReturn(incident);
+
+        mockMvc.perform(put("/api/v1/incidents/1")
+                        .contentType("application/json")
+                        .content("""
+                            {
+                                "title": "Updated Title",
+                                "description": "Updated Desc",
+                                "location": "Updated Loc",
+                                "priority": "CRITICAL"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated Title"))
+                .andExpect(jsonPath("$.description").value("Updated Desc"))
+                .andExpect(jsonPath("$.location").value("Updated Loc"))
+                .andExpect(jsonPath("$.priority").value("CRITICAL"));
+
+        verify(incidentService).updateIncident(eq(1L), any(UpdateIncidentRequest.class), any());
+    }
+
+    @Test
+    void shouldRejectUpdateIncidentWithBlankTitle() throws Exception {
+        mockMvc.perform(put("/api/v1/incidents/1")
+                        .contentType("application/json")
+                        .content("""
+                            {
+                                "title": "",
+                                "description": "Updated Desc",
+                                "location": "Updated Loc",
+                                "priority": "CRITICAL"
+                            }
+                            """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldGetAllIncidentsWithSearchAndFilters() throws Exception {
+        Page<Incident> emptyPage = new PageImpl<>(List.of(), PageRequest.of(0, 10, Sort.by(Sort.Direction.ASC, "priority")), 0);
+        when(incidentService.getIncidents(any(IncidentFilterCriteria.class), any(Pageable.class), any()))
+                .thenReturn(emptyPage);
+
+        mockMvc.perform(get("/api/v1/incidents")
+                        .param("search", "switch")
+                        .param("status", "OPEN")
+                        .param("priority", "HIGH")
+                        .param("assignedEngineerId", "5")
+                        .param("breachedOnly", "true")
+                        .param("sort", "priority,asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content").isArray());
+
+        verify(incidentService).getIncidents(argThat((IncidentFilterCriteria c) ->
+                "switch".equals(c.getSearch()) &&
+                IncidentStatus.OPEN == c.getStatus() &&
+                IncidentPriority.HIGH == c.getPriority() &&
+                Long.valueOf(5L).equals(c.getAssignedEngineerId()) &&
+                Boolean.TRUE.equals(c.getBreachedOnly())
+        ), any(Pageable.class), any());
     }
 }

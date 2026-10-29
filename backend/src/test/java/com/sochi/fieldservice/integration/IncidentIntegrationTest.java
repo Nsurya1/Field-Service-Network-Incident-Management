@@ -7,10 +7,16 @@ import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
+import com.sochi.fieldservice.incident.dto.IncidentFilterCriteria;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentRequest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
@@ -736,5 +742,100 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         assertTrue(hasComment);
         assertTrue(hasVisit);
         assertTrue(hasHistory);
+    }
+
+    @Test
+    @DisplayName("Verify PUT /incidents/{id} updates details, recalculates SLA deadline from createdAt, and records audit history")
+    void shouldUpdateIncidentAndRecalculateSlaDeadlineFromCreatedAt() {
+        // Create user for actor check
+        userRepository.save(new User("spec_admin", "admin@spec.com", "pass", Role.ROLE_ADMIN, null));
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Edge Switch Loop");
+        req.setDescription("STP flapping on port 12");
+        req.setPriority(IncidentPriority.LOW);
+        req.setLocation("Nagpur DC");
+        Incident created = incidentService.createIncident(req, "spec_admin");
+
+        LocalDateTime originalCreatedAt = created.getCreatedAt();
+        assertEquals(originalCreatedAt.plusHours(IncidentPriority.LOW.getSlaHours()).truncatedTo(ChronoUnit.SECONDS),
+                created.getSlaDeadline().truncatedTo(ChronoUnit.SECONDS));
+
+        // Update with CRITICAL priority (4 hours)
+        UpdateIncidentRequest updateReq = new UpdateIncidentRequest(
+                "Edge Switch Loop - Escalated",
+                "STP flapping spreading to aggregate switch",
+                "Nagpur DC - Rack 2",
+                IncidentPriority.CRITICAL
+        );
+
+        Incident updated = incidentService.updateIncident(created.getId(), updateReq, "spec_admin");
+
+        assertEquals("Edge Switch Loop - Escalated", updated.getTitle());
+        assertEquals("STP flapping spreading to aggregate switch", updated.getDescription());
+        assertEquals("Nagpur DC - Rack 2", updated.getLocation());
+        assertEquals(IncidentPriority.CRITICAL, updated.getPriority());
+
+        // SLA deadline must be exactly createdAt + CRITICAL SLA hours
+        assertEquals(originalCreatedAt.plusHours(IncidentPriority.CRITICAL.getSlaHours()), updated.getSlaDeadline());
+
+        // Verify history
+        List<IncidentHistory> history = incidentService.getIncidentHistory(created.getId());
+        IncidentHistory lastHistory = history.get(history.size() - 1);
+        assertEquals("EDITED", lastHistory.getAction());
+        assertTrue(lastHistory.getDescription().contains("Priority changed from LOW to CRITICAL"));
+        assertEquals("spec_admin", lastHistory.getPerformedBy());
+    }
+
+    @Test
+    @DisplayName("Verify JPA Specification search and multi-faceted filtering on PostgreSQL")
+    void shouldSearchAndFilterIncidentsUsingSpecification() {
+        CreateIncidentRequest r1 = new CreateIncidentRequest();
+        r1.setTitle("Core Router BGP Flap");
+        r1.setDescription("BGP session reset on peer 198.51.100.1");
+        r1.setPriority(IncidentPriority.CRITICAL);
+        r1.setLocation("Indore DC");
+        Incident i1 = incidentService.createIncident(r1);
+
+        CreateIncidentRequest r2 = new CreateIncidentRequest();
+        r2.setTitle("Fibre Cut Highway 3");
+        r2.setDescription("Physical trenching severed conduit");
+        r2.setPriority(IncidentPriority.HIGH);
+        r2.setLocation("Bhopal North");
+        Incident i2 = incidentService.createIncident(r2);
+
+        CreateIncidentRequest r3 = new CreateIncidentRequest();
+        r3.setTitle("Wireless Tower Alarm");
+        r3.setDescription("Power generator backup active");
+        r3.setPriority(IncidentPriority.LOW);
+        r3.setLocation("Jabalpur Site");
+        Incident i3 = incidentService.createIncident(r3);
+
+        // Test 1: Search by text in description
+        IncidentFilterCriteria searchBgp = new IncidentFilterCriteria();
+        searchBgp.setSearch("198.51.100.1");
+        Page<Incident> bgpResult = incidentService.getIncidents(searchBgp, PageRequest.of(0, 10));
+        assertTrue(bgpResult.getContent().stream().anyMatch(inc -> inc.getId().equals(i1.getId())));
+        assertFalse(bgpResult.getContent().stream().anyMatch(inc -> inc.getId().equals(i2.getId())));
+
+        // Test 2: Search by location text
+        IncidentFilterCriteria searchLocation = new IncidentFilterCriteria();
+        searchLocation.setSearch("Bhopal North");
+        Page<Incident> locResult = incidentService.getIncidents(searchLocation, PageRequest.of(0, 10));
+        assertTrue(locResult.getContent().stream().anyMatch(inc -> inc.getId().equals(i2.getId())));
+        assertFalse(locResult.getContent().stream().anyMatch(inc -> inc.getId().equals(i1.getId())));
+
+        // Test 3: Filter by Priority
+        IncidentFilterCriteria priorityCrit = new IncidentFilterCriteria();
+        priorityCrit.setPriority(IncidentPriority.CRITICAL);
+        Page<Incident> critResult = incidentService.getIncidents(priorityCrit, PageRequest.of(0, 10));
+        assertTrue(critResult.getContent().stream().allMatch(inc -> inc.getPriority() == IncidentPriority.CRITICAL));
+
+        // Test 4: Combined Filter (Priority + Search)
+        IncidentFilterCriteria combined = new IncidentFilterCriteria();
+        combined.setSearch("Fibre");
+        combined.setPriority(IncidentPriority.HIGH);
+        Page<Incident> combResult = incidentService.getIncidents(combined, PageRequest.of(0, 10));
+        assertTrue(combResult.getContent().stream().anyMatch(inc -> inc.getId().equals(i2.getId())));
     }
 }

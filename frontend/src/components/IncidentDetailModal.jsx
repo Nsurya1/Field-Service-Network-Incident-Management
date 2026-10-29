@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { incidentService } from '../services/incidentService';
-import { X, Clock, MapPin, User, Calendar, History, ShieldAlert, Wrench, CheckCircle2, MessageSquare, Send } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { X, Clock, MapPin, User, Calendar, History, ShieldAlert, Wrench, CheckCircle2, MessageSquare, Send, Edit3 } from 'lucide-react';
 
-export default function IncidentDetailModal({ incident, onClose }) {
+export default function IncidentDetailModal({ incident, onClose, onEdit }) {
+  const { user: currentUser } = useAuth();
+  const canEdit = currentUser?.role === 'ROLE_ADMIN' || currentUser?.role === 'ROLE_MANAGER';
   const [timeline, setTimeline] = useState([]);
   const [loadingTimeline, setLoadingTimeline] = useState(true);
   const [visits, setVisits] = useState([]);
@@ -156,12 +159,23 @@ export default function IncidentDetailModal({ incident, onClose }) {
             </div>
             <h2 className="text-lg font-bold text-slate-900 mt-1">{incident.title}</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-2">
+            {canEdit && onEdit && incident.status !== 'CLOSED' && (
+              <button
+                onClick={() => onEdit(incident)}
+                className="inline-flex items-center px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 text-indigo-600 bg-indigo-50/50 hover:bg-indigo-50 transition"
+              >
+                <Edit3 className="w-3.5 h-3.5 mr-1" />
+                Edit
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content Body */}

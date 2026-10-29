@@ -6,8 +6,10 @@ import com.sochi.fieldservice.engineer.service.EngineerService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
+import com.sochi.fieldservice.incident.dto.IncidentFilterCriteria;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
 import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentComment;
@@ -18,6 +20,7 @@ import com.sochi.fieldservice.incident.entity.RootCause;
 import com.sochi.fieldservice.incident.repository.IncidentCommentRepository;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
+import com.sochi.fieldservice.incident.specification.IncidentSpecification;
 import com.sochi.fieldservice.user.entity.Role;
 import com.sochi.fieldservice.user.entity.User;
 import com.sochi.fieldservice.user.repository.UserRepository;
@@ -208,6 +211,79 @@ public class IncidentService {
         return savedIncident;
     }
 
+    @Transactional
+    public Incident updateIncident(Long id, UpdateIncidentRequest request) {
+        return updateIncident(id, request, null);
+    }
+
+    @Transactional
+    public Incident updateIncident(Long id, UpdateIncidentRequest request, String username) {
+        if (username != null) {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user != null && user.getRole() != Role.ROLE_ADMIN && user.getRole() != Role.ROLE_MANAGER) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only administrators and managers can edit incidents");
+            }
+        }
+
+        Incident incident = getIncidentById(id);
+
+        if (incident.getStatus() == IncidentStatus.CLOSED) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot edit a closed incident");
+        }
+
+        boolean priorityChanged = request.getPriority() != null && request.getPriority() != incident.getPriority();
+        IncidentPriority oldPriority = incident.getPriority();
+
+        incident.setTitle(request.getTitle());
+        incident.setDescription(request.getDescription());
+        incident.setLocation(request.getLocation());
+
+        if (priorityChanged) {
+            incident.setPriority(request.getPriority());
+            LocalDateTime baseTime = incident.getCreatedAt() != null ? incident.getCreatedAt() : LocalDateTime.now();
+            incident.setSlaDeadline(baseTime.plusHours(request.getPriority().getSlaHours()));
+        }
+
+        Incident savedIncident = incidentRepository.save(incident);
+
+        String historyDesc = priorityChanged
+                ? String.format("Priority changed from %s to %s, SLA deadline recalculated", oldPriority, request.getPriority())
+                : "Incident details updated";
+
+        incidentHistoryRepository.save(new IncidentHistory(
+                savedIncident,
+                "EDITED",
+                historyDesc,
+                username != null ? username : "system"
+        ));
+
+        return savedIncident;
+    }
+
+    public Page<Incident> getIncidents(
+            IncidentFilterCriteria criteria,
+            Pageable pageable,
+            String username) {
+
+        IncidentFilterCriteria effectiveCriteria = criteria != null ? criteria : new IncidentFilterCriteria();
+
+        if (username != null) {
+            User user = userRepository.findByUsername(username).orElse(null);
+            if (user != null && user.getRole() == Role.ROLE_ENGINEER) {
+                if (user.getEngineer() == null) {
+                    return Page.empty(pageable);
+                }
+                effectiveCriteria.setAssignedEngineerId(user.getEngineer().getId());
+            }
+        }
+
+        return incidentRepository.findAll(IncidentSpecification.withFilter(effectiveCriteria), pageable);
+    }
+
+    public Page<Incident> getIncidents(IncidentFilterCriteria criteria, Pageable pageable) {
+        return getIncidents(criteria, pageable, null);
+    }
+
     public Page<Incident> getIncidents(
             IncidentStatus status,
             IncidentPriority priority,
@@ -220,36 +296,14 @@ public class IncidentService {
             IncidentPriority priority,
             Pageable pageable,
             String username) {
-
-        if (username != null) {
-            User user = userRepository.findByUsername(username).orElse(null);
-            if (user != null && user.getRole() == Role.ROLE_ENGINEER) {
-                if (user.getEngineer() == null) {
-                    return Page.empty(pageable);
-                }
-                return getIncidentsForEngineer(user.getEngineer().getId(), status, priority, pageable);
-            }
-        }
-
-        if (status != null && priority != null) {
-            return incidentRepository.findByStatusAndPriority(
-                    status, priority, pageable);
-        }
-
-        if (status != null) {
-            return incidentRepository.findByStatus(status, pageable);
-        }
-
-        if (priority != null) {
-            return incidentRepository.findByPriority(priority, pageable);
-        }
-
-        return incidentRepository.findAll(pageable);
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria();
+        criteria.setStatus(status);
+        criteria.setPriority(priority);
+        return getIncidents(criteria, pageable, username);
     }
 
     public Page<Incident> getMyIncidents(
-            IncidentStatus status,
-            IncidentPriority priority,
+            IncidentFilterCriteria criteria,
             Pageable pageable,
             String username) {
 
@@ -267,31 +321,21 @@ public class IncidentService {
             return Page.empty(pageable);
         }
 
-        return getIncidentsForEngineer(user.getEngineer().getId(), status, priority, pageable);
+        IncidentFilterCriteria effectiveCriteria = criteria != null ? criteria : new IncidentFilterCriteria();
+        effectiveCriteria.setAssignedEngineerId(user.getEngineer().getId());
+
+        return incidentRepository.findAll(IncidentSpecification.withFilter(effectiveCriteria), pageable);
     }
 
-    private Page<Incident> getIncidentsForEngineer(
-            Long engineerId,
+    public Page<Incident> getMyIncidents(
             IncidentStatus status,
             IncidentPriority priority,
-            Pageable pageable) {
-
-        if (status != null && priority != null) {
-            return incidentRepository.findByAssignedEngineerIdAndStatusAndPriority(
-                    engineerId, status, priority, pageable);
-        }
-
-        if (status != null) {
-            return incidentRepository.findByAssignedEngineerIdAndStatus(
-                    engineerId, status, pageable);
-        }
-
-        if (priority != null) {
-            return incidentRepository.findByAssignedEngineerIdAndPriority(
-                    engineerId, priority, pageable);
-        }
-
-        return incidentRepository.findByAssignedEngineerId(engineerId, pageable);
+            Pageable pageable,
+            String username) {
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria();
+        criteria.setStatus(status);
+        criteria.setPriority(priority);
+        return getMyIncidents(criteria, pageable, username);
     }
 
     @Transactional

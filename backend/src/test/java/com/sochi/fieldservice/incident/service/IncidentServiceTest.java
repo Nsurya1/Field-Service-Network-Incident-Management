@@ -4,7 +4,10 @@ import com.sochi.fieldservice.engineer.service.EngineerService;
 
 import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentFilterCriteria;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentRequest;
+import org.springframework.data.jpa.domain.Specification;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
@@ -488,8 +491,7 @@ class IncidentServiceTest {
         Page<Incident> expectedPage =
                 new PageImpl<>(List.of(incident), pageable, 1);
 
-        when(incidentRepository.findByStatus(
-                IncidentStatus.OPEN, pageable))
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable)))
                 .thenReturn(expectedPage);
 
         Page<Incident> result = incidentService.getIncidents(
@@ -499,8 +501,7 @@ class IncidentServiceTest {
         assertEquals(IncidentStatus.OPEN,
                 result.getContent().get(0).getStatus());
 
-        verify(incidentRepository).findByStatus(
-                IncidentStatus.OPEN, pageable);
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -514,8 +515,7 @@ class IncidentServiceTest {
         Page<Incident> expectedPage =
                 new PageImpl<>(List.of(incident), pageable, 1);
 
-        when(incidentRepository.findByPriority(
-                IncidentPriority.CRITICAL, pageable))
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable)))
                 .thenReturn(expectedPage);
 
         Page<Incident> result = incidentService.getIncidents(
@@ -525,8 +525,7 @@ class IncidentServiceTest {
         assertEquals(IncidentPriority.CRITICAL,
                 result.getContent().get(0).getPriority());
 
-        verify(incidentRepository).findByPriority(
-                IncidentPriority.CRITICAL, pageable);
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -540,8 +539,7 @@ class IncidentServiceTest {
         Page<Incident> expectedPage =
                 new PageImpl<>(List.of(incident), pageable, 1);
 
-        when(incidentRepository.findByStatusAndPriority(
-                IncidentStatus.OPEN, IncidentPriority.CRITICAL, pageable))
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable)))
                 .thenReturn(expectedPage);
 
         Page<Incident> result = incidentService.getIncidents(
@@ -554,8 +552,7 @@ class IncidentServiceTest {
         assertEquals(IncidentPriority.CRITICAL,
                 result.getContent().get(0).getPriority());
 
-        verify(incidentRepository).findByStatusAndPriority(
-                IncidentStatus.OPEN, IncidentPriority.CRITICAL, pageable);
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -569,7 +566,7 @@ class IncidentServiceTest {
         Page<Incident> expectedPage =
                 new PageImpl<>(List.of(incident), pageable, 1);
 
-        when(incidentRepository.findAll(pageable))
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable)))
                 .thenReturn(expectedPage);
 
         Page<Incident> result = incidentService.getIncidents(
@@ -579,7 +576,7 @@ class IncidentServiceTest {
         assertEquals("Router failure",
                 result.getContent().get(0).getTitle());
 
-        verify(incidentRepository).findAll(pageable);
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
     }
 
     @Test
@@ -684,14 +681,14 @@ class IncidentServiceTest {
         User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
 
         when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
-        when(incidentRepository.findByAssignedEngineerId(42L, PageRequest.of(0, 10)))
+        when(incidentRepository.findAll(any(Specification.class), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(List.of(new Incident())));
 
         Page<Incident> result = incidentService.getIncidents(null, null, PageRequest.of(0, 10), "tech");
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
-        verify(incidentRepository).findByAssignedEngineerId(42L, PageRequest.of(0, 10));
+        verify(incidentRepository).findAll(any(Specification.class), eq(PageRequest.of(0, 10)));
     }
 
     @Test
@@ -701,14 +698,14 @@ class IncidentServiceTest {
         User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
 
         when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
-        when(incidentRepository.findByAssignedEngineerIdAndStatusAndPriority(42L, IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10)))
+        when(incidentRepository.findAll(any(Specification.class), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(List.of(new Incident())));
 
         Page<Incident> result = incidentService.getIncidents(IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10), "tech");
 
         assertNotNull(result);
         assertEquals(1, result.getTotalElements());
-        verify(incidentRepository).findByAssignedEngineerIdAndStatusAndPriority(42L, IncidentStatus.ASSIGNED, IncidentPriority.HIGH, PageRequest.of(0, 10));
+        verify(incidentRepository).findAll(any(Specification.class), eq(PageRequest.of(0, 10)));
     }
 
     @Test
@@ -718,7 +715,7 @@ class IncidentServiceTest {
         User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
 
         when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
-        when(incidentRepository.findByAssignedEngineerIdAndStatus(42L, IncidentStatus.IN_PROGRESS, PageRequest.of(0, 10)))
+        when(incidentRepository.findAll(any(Specification.class), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(List.of(new Incident())));
 
         Page<Incident> result = incidentService.getIncidents(IncidentStatus.IN_PROGRESS, null, PageRequest.of(0, 10), "tech");
@@ -734,7 +731,7 @@ class IncidentServiceTest {
         User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
 
         when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
-        when(incidentRepository.findByAssignedEngineerIdAndPriority(42L, IncidentPriority.CRITICAL, PageRequest.of(0, 10)))
+        when(incidentRepository.findAll(any(Specification.class), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(List.of(new Incident())));
 
         Page<Incident> result = incidentService.getIncidents(null, IncidentPriority.CRITICAL, PageRequest.of(0, 10), "tech");
@@ -762,7 +759,7 @@ class IncidentServiceTest {
         User techUser = new User("tech", "tech@test.com", "pass", Role.ROLE_ENGINEER, engineer);
 
         when(userRepository.findByUsername("tech")).thenReturn(Optional.of(techUser));
-        when(incidentRepository.findByAssignedEngineerId(42L, PageRequest.of(0, 10)))
+        when(incidentRepository.findAll(any(Specification.class), eq(PageRequest.of(0, 10))))
                 .thenReturn(new PageImpl<>(List.of(new Incident())));
 
         Page<Incident> result = incidentService.getMyIncidents(null, null, PageRequest.of(0, 10), "tech");
@@ -1263,5 +1260,158 @@ class IncidentServiceTest {
         assertEquals(t1, timeline.get(0).getTimestamp());
         assertEquals(t2, timeline.get(1).getTimestamp());
         assertEquals(t3, timeline.get(2).getTimestamp());
+    }
+
+    @Test
+    void updateIncidentShouldUpdateDetailsWithoutPriorityChange() {
+        Incident incident = new Incident();
+        ReflectionTestUtils.setField(incident, "id", 1L);
+        incident.setTitle("Old Title");
+        incident.setDescription("Old Desc");
+        incident.setLocation("Old Loc");
+        incident.setPriority(IncidentPriority.HIGH);
+        incident.setStatus(IncidentStatus.OPEN);
+        java.time.LocalDateTime createdAt = java.time.LocalDateTime.now().minusHours(2);
+        java.time.LocalDateTime oldDeadline = createdAt.plusHours(IncidentPriority.HIGH.getSlaHours());
+        incident.setCreatedAt(createdAt);
+        incident.setSlaDeadline(oldDeadline);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        UpdateIncidentRequest request = new UpdateIncidentRequest(
+                "New Title",
+                "New Desc",
+                "New Loc",
+                IncidentPriority.HIGH
+        );
+
+        Incident updated = incidentService.updateIncident(1L, request, "manager1");
+
+        assertEquals("New Title", updated.getTitle());
+        assertEquals("New Desc", updated.getDescription());
+        assertEquals("New Loc", updated.getLocation());
+        assertEquals(IncidentPriority.HIGH, updated.getPriority());
+        assertEquals(oldDeadline, updated.getSlaDeadline());
+
+        verify(incidentHistoryRepository).save(argThat(h ->
+                h.getAction().equals("EDITED") &&
+                h.getDescription().equals("Incident details updated") &&
+                h.getPerformedBy().equals("manager1")
+        ));
+    }
+
+    @Test
+    void updateIncidentShouldUpdateDetailsWithPriorityChangeAndRecalculateSla() {
+        Incident incident = new Incident();
+        ReflectionTestUtils.setField(incident, "id", 1L);
+        incident.setTitle("Router Down");
+        incident.setDescription("Old Desc");
+        incident.setLocation("Old Loc");
+        incident.setPriority(IncidentPriority.LOW); // 48h
+        incident.setStatus(IncidentStatus.OPEN);
+        java.time.LocalDateTime createdAt = java.time.LocalDateTime.now().minusHours(1);
+        incident.setCreatedAt(createdAt);
+        incident.setSlaDeadline(createdAt.plusHours(IncidentPriority.LOW.getSlaHours()));
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        UpdateIncidentRequest request = new UpdateIncidentRequest(
+                "Router Down - Critical",
+                "Updated Desc",
+                "Updated Loc",
+                IncidentPriority.CRITICAL // 4h
+        );
+
+        Incident updated = incidentService.updateIncident(1L, request, "admin");
+
+        assertEquals(IncidentPriority.CRITICAL, updated.getPriority());
+        assertEquals(createdAt.plusHours(IncidentPriority.CRITICAL.getSlaHours()), updated.getSlaDeadline());
+
+        verify(incidentHistoryRepository).save(argThat(h ->
+                h.getAction().equals("EDITED") &&
+                h.getDescription().contains("Priority changed from LOW to CRITICAL") &&
+                h.getPerformedBy().equals("admin")
+        ));
+    }
+
+    @Test
+    void updateIncidentShouldThrowBadRequestWhenIncidentIsClosed() {
+        Incident incident = new Incident();
+        ReflectionTestUtils.setField(incident, "id", 1L);
+        incident.setStatus(IncidentStatus.CLOSED);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        UpdateIncidentRequest request = new UpdateIncidentRequest("T", "D", "L", IncidentPriority.HIGH);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncident(1L, request, "admin"));
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("closed"));
+    }
+
+    @Test
+    void updateIncidentShouldThrowForbiddenWhenUserIsNotAdminOrManager() {
+        User engineerUser = new User("tech1", "tech@test.com", "pass", Role.ROLE_ENGINEER, null);
+        when(userRepository.findByUsername("tech1")).thenReturn(Optional.of(engineerUser));
+
+        UpdateIncidentRequest request = new UpdateIncidentRequest("T", "D", "L", IncidentPriority.HIGH);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncident(1L, request, "tech1"));
+        assertEquals(403, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("administrators and managers"));
+    }
+
+    @Test
+    void updateIncidentShouldThrowNotFoundWhenIncidentDoesNotExist() {
+        when(incidentRepository.findById(999L)).thenReturn(Optional.empty());
+
+        UpdateIncidentRequest request = new UpdateIncidentRequest("T", "D", "L", IncidentPriority.HIGH);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncident(999L, request, "admin"));
+        assertEquals(404, ex.getStatusCode().value());
+    }
+
+    @Test
+    void getIncidentsWithFilterCriteriaShouldQueryRepositoryWithSpecification() {
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria();
+        criteria.setSearch("fiber");
+        criteria.setBreachedOnly(true);
+        PageRequest pageable = PageRequest.of(0, 10);
+
+        Page<Incident> expectedPage = new PageImpl<>(List.of(new Incident()));
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(expectedPage);
+
+        Page<Incident> result = incidentService.getIncidents(criteria, pageable, null);
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
+    }
+
+    @Test
+    void getMyIncidentsWithFilterCriteriaShouldQueryRepositoryWithSpecification() {
+        Engineer engineer = new Engineer();
+        ReflectionTestUtils.setField(engineer, "id", 15L);
+        User tech = new User("tech15", "t15@test.com", "pass", Role.ROLE_ENGINEER, engineer);
+
+        when(userRepository.findByUsername("tech15")).thenReturn(Optional.of(tech));
+
+        IncidentFilterCriteria criteria = new IncidentFilterCriteria();
+        criteria.setSearch("core");
+        PageRequest pageable = PageRequest.of(0, 10);
+
+        Page<Incident> expectedPage = new PageImpl<>(List.of(new Incident()));
+        when(incidentRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(expectedPage);
+
+        Page<Incident> result = incidentService.getMyIncidents(criteria, pageable, "tech15");
+
+        assertNotNull(result);
+        assertEquals(1, result.getTotalElements());
+        verify(incidentRepository).findAll(any(Specification.class), eq(pageable));
     }
 }

@@ -6,12 +6,34 @@ export const incidentService = {
     return response.data;
   },
 
-  async getIncidents(status, priority, page = 0, size = 10) {
-    const params = { page, size };
-    if (status) params.status = status;
-    if (priority) params.priority = priority;
+  async getIncidents(filters = {}, priority = null, page = 0, size = 10, sort = 'createdAt,desc') {
+    let params = { page, size, sort };
+
+    if (typeof filters === 'string') {
+      // Legacy argument signature: (status, priority, page, size)
+      if (filters) params.status = filters;
+      if (priority) params.priority = priority;
+    } else if (filters && typeof filters === 'object') {
+      if (filters.search) params.search = filters.search;
+      if (filters.status) params.status = filters.status;
+      if (filters.priority) params.priority = filters.priority;
+      if (filters.assignedEngineerId) params.assignedEngineerId = filters.assignedEngineerId;
+      if (filters.createdFrom) params.createdFrom = filters.createdFrom;
+      if (filters.createdTo) params.createdTo = filters.createdTo;
+      if (filters.breachedOnly !== undefined && filters.breachedOnly !== null && filters.breachedOnly !== '') {
+        params.breachedOnly = filters.breachedOnly;
+      }
+      if (filters.sort) params.sort = filters.sort;
+      if (filters.page !== undefined) params.page = filters.page;
+      if (filters.size !== undefined) params.size = filters.size;
+    }
 
     const response = await api.get('/incidents', { params });
+    return response.data;
+  },
+
+  async updateIncident(id, data) {
+    const response = await api.put(`/incidents/${id}`, data);
     return response.data;
   },
 
