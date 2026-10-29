@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Shield, User, LogOut, Plus, Users, Activity } from 'lucide-react';
 
-export default function Navbar({ onOpenCreate, onOpenEngineers }) {
+export default function Navbar({ onOpenCreate, onOpenEngineers, activeTab = 'incidents', onSelectTab }) {
   const { user, logout, hasRole } = useAuth();
 
   const getRoleBadgeColor = (role) => {
@@ -35,6 +35,31 @@ export default function Navbar({ onOpenCreate, onOpenEngineers }) {
                 Incident Dispatch
               </span>
             </div>
+
+            {onSelectTab && (
+              <nav className="hidden sm:flex items-center space-x-1 ml-6 border-l border-slate-200 pl-6">
+                <button
+                  onClick={() => onSelectTab('incidents')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    activeTab === 'incidents'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  Incidents
+                </button>
+                <button
+                  onClick={() => onSelectTab('reports')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    activeTab === 'reports'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  Reports & MTTR
+                </button>
+              </nav>
+            )}
           </div>
 
           <div className="flex items-center space-x-3">

@@ -10,11 +10,13 @@ import AssignEngineerModal from './components/AssignEngineerModal';
 import StatusTransitionModal from './components/StatusTransitionModal';
 import EngineerManagementModal from './components/EngineerManagementModal';
 import EditIncidentModal from './components/EditIncidentModal';
+import ReportsPage from './components/ReportsPage';
 import AuthView from './components/AuthView';
 import { Filter, RefreshCw, AlertCircle, Search, AlertTriangle } from 'lucide-react';
 
 function IncidentDashboard() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState('incidents');
 
   // State
   const [stats, setStats] = useState(null);
@@ -105,110 +107,118 @@ function IncidentDashboard() {
       <Navbar
         onOpenCreate={() => setIsCreateOpen(true)}
         onOpenEngineers={() => setIsEngineersOpen(true)}
+        activeTab={activeTab}
+        onSelectTab={setActiveTab}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Metric widgets */}
-        <StatsDashboard stats={stats} loading={statsLoading} />
+        {activeTab === 'reports' ? (
+          <ReportsPage />
+        ) : (
+          <>
+            {/* Metric widgets */}
+            <StatsDashboard stats={stats} loading={statsLoading} />
 
-        {/* Action & Filter Bar */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
-            <div className="flex items-center text-xs font-semibold text-slate-500 mr-1">
-              <Filter className="w-3.5 h-3.5 mr-1.5" />
-              Filters:
-            </div>
+            {/* Action & Filter Bar */}
+            <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
+                <div className="flex items-center text-xs font-semibold text-slate-500 mr-1">
+                  <Filter className="w-3.5 h-3.5 mr-1.5" />
+                  Filters:
+                </div>
 
-            {/* Free-text Search */}
-            <div className="relative flex-1 min-w-[180px] max-w-xs">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
-                placeholder="Search title, description, location..."
-                className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
-              />
-            </div>
+                {/* Free-text Search */}
+                <div className="relative flex-1 min-w-[180px] max-w-xs">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => { setSearchTerm(e.target.value); setPage(0); }}
+                    placeholder="Search title, description, location..."
+                    className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
 
-            {/* Status Dropdown */}
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              <option value="">All Statuses</option>
-              <option value="OPEN">OPEN</option>
-              <option value="ASSIGNED">ASSIGNED</option>
-              <option value="IN_PROGRESS">IN PROGRESS</option>
-              <option value="RESOLVED">RESOLVED</option>
-              <option value="CLOSED">CLOSED</option>
-            </select>
+                {/* Status Dropdown */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">All Statuses</option>
+                  <option value="OPEN">OPEN</option>
+                  <option value="ASSIGNED">ASSIGNED</option>
+                  <option value="IN_PROGRESS">IN PROGRESS</option>
+                  <option value="RESOLVED">RESOLVED</option>
+                  <option value="CLOSED">CLOSED</option>
+                </select>
 
-            {/* Priority Dropdown */}
-            <select
-              value={priorityFilter}
-              onChange={(e) => { setPriorityFilter(e.target.value); setPage(0); }}
-              className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
-            >
-              <option value="">All Priorities</option>
-              <option value="CRITICAL">CRITICAL</option>
-              <option value="HIGH">HIGH</option>
-              <option value="MEDIUM">MEDIUM</option>
-              <option value="LOW">LOW</option>
-            </select>
+                {/* Priority Dropdown */}
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => { setPriorityFilter(e.target.value); setPage(0); }}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-700 bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                >
+                  <option value="">All Priorities</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="LOW">LOW</option>
+                </select>
 
-            {/* Breached Only Filter */}
-            <button
-              onClick={() => { setBreachedOnly(!breachedOnly); setPage(0); }}
-              className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                breachedOnly
-                  ? 'bg-rose-50 border-rose-300 text-rose-700 font-semibold'
-                  : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <AlertTriangle className={`w-3.5 h-3.5 mr-1.5 ${breachedOnly ? 'text-rose-600' : 'text-slate-400'}`} />
-              Breached Only
-            </button>
+                {/* Breached Only Filter */}
+                <button
+                  onClick={() => { setBreachedOnly(!breachedOnly); setPage(0); }}
+                  className={`inline-flex items-center px-2.5 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+                    breachedOnly
+                      ? 'bg-rose-50 border-rose-300 text-rose-700 font-semibold'
+                      : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <AlertTriangle className={`w-3.5 h-3.5 mr-1.5 ${breachedOnly ? 'text-rose-600' : 'text-slate-400'}`} />
+                  Breached Only
+                </button>
 
-            {hasActiveFilters && (
+                {hasActiveFilters && (
+                  <button
+                    onClick={resetFilters}
+                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 ml-1 cursor-pointer"
+                  >
+                    Reset filters
+                  </button>
+                )}
+              </div>
+
               <button
-                onClick={resetFilters}
-                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline underline-offset-2 ml-1 cursor-pointer"
+                onClick={refreshAll}
+                className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 transition cursor-pointer"
               >
-                Reset filters
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                Refresh
               </button>
+            </div>
+
+            {fetchError && (
+              <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
+                <span>{fetchError}</span>
+              </div>
             )}
-          </div>
 
-          <button
-            onClick={refreshAll}
-            className="inline-flex items-center px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-600 bg-white hover:bg-slate-50 transition cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-            Refresh
-          </button>
-        </div>
-
-        {fetchError && (
-          <div className="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center">
-            <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
-            <span>{fetchError}</span>
-          </div>
+            {/* Incident Table */}
+            <IncidentTable
+              incidents={incidents}
+              page={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              onPageChange={setPage}
+              onSelectIncident={setDetailIncident}
+              onOpenAssign={setAssignIncident}
+              onOpenStatus={setStatusIncident}
+              loading={tableLoading}
+            />
+          </>
         )}
-
-        {/* Incident Table */}
-        <IncidentTable
-          incidents={incidents}
-          page={page}
-          totalPages={totalPages}
-          totalElements={totalElements}
-          onPageChange={setPage}
-          onSelectIncident={setDetailIncident}
-          onOpenAssign={setAssignIncident}
-          onOpenStatus={setStatusIncident}
-          loading={tableLoading}
-        />
       </main>
 
       {/* Modals */}

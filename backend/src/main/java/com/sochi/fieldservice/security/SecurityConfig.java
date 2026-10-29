@@ -102,6 +102,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/incidents/*/status").hasAnyRole("ADMIN", "MANAGER", "ENGINEER")
                         .requestMatchers(HttpMethod.GET, "/api/v1/incidents/**").hasAnyRole("ADMIN", "MANAGER", "ENGINEER", "VIEWER")
 
+                        // Reports and analytics permissions
+                        .requestMatchers("/api/v1/reports/**").hasAnyRole("ADMIN", "MANAGER", "VIEWER")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

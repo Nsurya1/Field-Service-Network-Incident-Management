@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -31,6 +32,7 @@ import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -760,5 +762,52 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("Core Link Flapping - Resolved by Admin"))
                 .andExpect(jsonPath("$.priority").value("LOW"));
+    }
+
+    @Test
+    @DisplayName("Verify /api/v1/reports/** RBAC: ADMIN/MANAGER/VIEWER allowed, ENGINEER forbidden, unauthenticated 401")
+    void shouldEnforceRbacOnReportsEndpoints() throws Exception {
+        User adminUser = userRepository.save(new User("admin_rpt", "admin@rpt.com", "pass", Role.ROLE_ADMIN, null));
+        User managerUser = userRepository.save(new User("manager_rpt", "manager@rpt.com", "pass", Role.ROLE_MANAGER, null));
+        User viewerUser = userRepository.save(new User("viewer_rpt", "viewer@rpt.com", "pass", Role.ROLE_VIEWER, null));
+        User engUser = userRepository.save(new User("eng_rpt", "eng@rpt.com", "pass", Role.ROLE_ENGINEER, null));
+
+        String adminToken = "Bearer " + jwtUtils.generateToken(adminUser);
+        String managerToken = "Bearer " + jwtUtils.generateToken(managerUser);
+        String viewerToken = "Bearer " + jwtUtils.generateToken(viewerUser);
+        String engToken = "Bearer " + jwtUtils.generateToken(engUser);
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(get("/api/v1/reports/summary"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/reports/export/csv"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. ENGINEER -> 403 Forbidden
+        mockMvc.perform(get("/api/v1/reports/summary").header("Authorization", engToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/v1/reports/export/csv").header("Authorization", engToken))
+                .andExpect(status().isForbidden());
+
+        // 3. VIEWER -> 200 OK
+        mockMvc.perform(get("/api/v1/reports/summary").header("Authorization", viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.mttrHours").exists());
+
+        mockMvc.perform(get("/api/v1/reports/export/csv").header("Authorization", viewerToken))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"incident-report.csv\""));
+
+        // 4. MANAGER -> 200 OK
+        mockMvc.perform(get("/api/v1/reports/summary").header("Authorization", managerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.slaCompliancePercentage").exists());
+
+        // 5. ADMIN -> 200 OK
+        mockMvc.perform(get("/api/v1/reports/summary").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalIncidents").exists());
     }
 }
