@@ -22,6 +22,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
+import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
+import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
+import com.sochi.fieldservice.incident.entity.IncidentComment;
+import com.sochi.fieldservice.incident.repository.IncidentCommentRepository;
+import com.sochi.fieldservice.visit.entity.ServiceVisit;
+import com.sochi.fieldservice.visit.repository.ServiceVisitRepository;
 import com.sochi.fieldservice.incident.entity.RootCause;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
@@ -56,6 +63,12 @@ class IncidentServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private IncidentCommentRepository incidentCommentRepository;
+
+    @Mock
+    private ServiceVisitRepository serviceVisitRepository;
 
     @InjectMocks
     private IncidentService incidentService;
@@ -1019,5 +1032,236 @@ class IncidentServiceTest {
         assertEquals(400, ex.getStatusCode().value());
         assertTrue(ex.getReason().contains("Cannot unassign engineer from a RESOLVED incident"));
         verify(incidentRepository, never()).save(any(Incident.class));
+    }
+
+    @Test
+    void createIncidentWithUsernameShouldRecordPerformedByInHistory() {
+        CreateIncidentRequest request = new CreateIncidentRequest();
+        request.setTitle("Optical Splice Box Damaged");
+        request.setDescription("Water ingress detected");
+        request.setPriority(IncidentPriority.HIGH);
+
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident created = incidentService.createIncident(request, "dispatcher_joe");
+
+        assertNotNull(created);
+        verify(incidentHistoryRepository).save(argThat(h ->
+                "CREATED".equals(h.getAction()) && "dispatcher_joe".equals(h.getPerformedBy())
+        ));
+    }
+
+    @Test
+    void assignIncidentWithUsernameShouldRecordPerformedByInHistory() {
+        Incident incident = new Incident();
+        incident.setStatus(IncidentStatus.OPEN);
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        Engineer engineer = new Engineer();
+        engineer.setName("Bob Tech");
+        engineer.setActive(true);
+        engineer.setAvailabilityStatus(AvailabilityStatus.AVAILABLE);
+        when(engineerService.getEngineerByIdForUpdate(2L)).thenReturn(engineer);
+        when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(2L), any())).thenReturn(0L);
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.assignIncident(1L, 2L, "manager_mary");
+
+        assertEquals(engineer, result.getAssignedEngineer());
+        verify(incidentHistoryRepository).save(argThat(h ->
+                "ASSIGNED".equals(h.getAction()) && "manager_mary".equals(h.getPerformedBy())
+        ));
+    }
+
+    @Test
+    void unassignIncidentWithUsernameShouldRecordPerformedByInHistory() {
+        Incident incident = new Incident();
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        Engineer eng = new Engineer();
+        eng.setName("Carol Danvers");
+        incident.setAssignedEngineer(eng);
+
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(i -> i.getArgument(0));
+
+        Incident result = incidentService.unassignIncident(1L, "admin_jane");
+
+        assertNull(result.getAssignedEngineer());
+        assertEquals(IncidentStatus.OPEN, result.getStatus());
+        verify(incidentHistoryRepository).save(argThat(h ->
+                "UNASSIGNED".equals(h.getAction()) && "admin_jane".equals(h.getPerformedBy())
+        ));
+    }
+
+    @Test
+    void addCommentAsManagerShouldSucceed() {
+        Incident incident = new Incident();
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        User manager = new User("manager1", "manager@test.com", "pass", Role.ROLE_MANAGER);
+        when(userRepository.findByUsername("manager1")).thenReturn(Optional.of(manager));
+
+        when(incidentCommentRepository.save(any(IncidentComment.class))).thenAnswer(i -> {
+            IncidentComment c = i.getArgument(0);
+            ReflectionTestUtils.setField(c, "id", 100L);
+            ReflectionTestUtils.setField(c, "createdAt", java.time.LocalDateTime.now());
+            return c;
+        });
+
+        CreateIncidentCommentRequest req = new CreateIncidentCommentRequest("Dispatch priority escalated by NOC");
+        IncidentCommentResponse response = incidentService.addComment(1L, req, "manager1");
+
+        assertNotNull(response);
+        assertEquals(100L, response.getId());
+        assertEquals("manager1", response.getAuthor());
+        assertEquals("Dispatch priority escalated by NOC", response.getText());
+
+        verify(incidentHistoryRepository).save(argThat(h ->
+                "COMMENT_ADDED".equals(h.getAction()) && "manager1".equals(h.getPerformedBy())
+        ));
+    }
+
+    @Test
+    void addCommentAsAssignedEngineerShouldSucceed() {
+        Engineer eng = new Engineer();
+        ReflectionTestUtils.setField(eng, "id", 5L);
+
+        Incident incident = new Incident();
+        incident.setAssignedEngineer(eng);
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        User tech = new User("tech5", "tech5@test.com", "pass", Role.ROLE_ENGINEER, eng);
+        when(userRepository.findByUsername("tech5")).thenReturn(Optional.of(tech));
+
+        when(incidentCommentRepository.save(any(IncidentComment.class))).thenAnswer(i -> {
+            IncidentComment c = i.getArgument(0);
+            ReflectionTestUtils.setField(c, "id", 105L);
+            ReflectionTestUtils.setField(c, "createdAt", java.time.LocalDateTime.now());
+            return c;
+        });
+
+        CreateIncidentCommentRequest req = new CreateIncidentCommentRequest("Arrived on site; inspecting patch panel");
+        IncidentCommentResponse response = incidentService.addComment(1L, req, "tech5");
+
+        assertNotNull(response);
+        assertEquals(105L, response.getId());
+        assertEquals("tech5", response.getAuthor());
+    }
+
+    @Test
+    void addCommentAsViewerShouldThrow403() {
+        Incident incident = new Incident();
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        User viewer = new User("viewer1", "v@test.com", "pass", Role.ROLE_VIEWER);
+        when(userRepository.findByUsername("viewer1")).thenReturn(Optional.of(viewer));
+
+        CreateIncidentCommentRequest req = new CreateIncidentCommentRequest("Illegal comment by viewer");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.addComment(1L, req, "viewer1"));
+
+        assertEquals(403, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Viewers have read-only access"));
+        verify(incidentCommentRepository, never()).save(any(IncidentComment.class));
+    }
+
+    @Test
+    void addCommentAsUnassignedEngineerShouldThrow403() {
+        Engineer eng1 = new Engineer();
+        ReflectionTestUtils.setField(eng1, "id", 1L);
+
+        Engineer eng2 = new Engineer();
+        ReflectionTestUtils.setField(eng2, "id", 2L);
+
+        Incident incident = new Incident();
+        incident.setAssignedEngineer(eng1);
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        User peerTech = new User("peer_tech", "peer@test.com", "pass", Role.ROLE_ENGINEER, eng2);
+        when(userRepository.findByUsername("peer_tech")).thenReturn(Optional.of(peerTech));
+
+        CreateIncidentCommentRequest req = new CreateIncidentCommentRequest("Trying to comment on peer incident");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.addComment(1L, req, "peer_tech"));
+
+        assertEquals(403, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Engineers can only comment on incidents assigned to them"));
+        verify(incidentCommentRepository, never()).save(any(IncidentComment.class));
+    }
+
+    @Test
+    void addCommentWithoutUsernameShouldThrow401() {
+        Incident incident = new Incident();
+        when(incidentRepository.findById(1L)).thenReturn(Optional.of(incident));
+
+        CreateIncidentCommentRequest req = new CreateIncidentCommentRequest("No auth");
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.addComment(1L, req, null));
+
+        assertEquals(401, ex.getStatusCode().value());
+    }
+
+    @Test
+    void getCommentsShouldReturnCommentList() {
+        when(incidentRepository.existsById(1L)).thenReturn(true);
+
+        Incident incident = new Incident();
+        ReflectionTestUtils.setField(incident, "id", 1L);
+
+        IncidentComment c1 = new IncidentComment(incident, "user1", "Comment 1");
+        ReflectionTestUtils.setField(c1, "id", 1L);
+        IncidentComment c2 = new IncidentComment(incident, "user2", "Comment 2");
+        ReflectionTestUtils.setField(c2, "id", 2L);
+
+        when(incidentCommentRepository.findByIncidentIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(c1, c2));
+
+        List<IncidentCommentResponse> result = incidentService.getComments(1L);
+
+        assertEquals(2, result.size());
+        assertEquals("Comment 1", result.get(0).getText());
+        assertEquals("Comment 2", result.get(1).getText());
+    }
+
+    @Test
+    void getTimelineShouldReturnMergedSortedTimeline() {
+        when(incidentRepository.existsById(1L)).thenReturn(true);
+
+        Incident incident = new Incident();
+        ReflectionTestUtils.setField(incident, "id", 1L);
+
+        java.time.LocalDateTime t1 = java.time.LocalDateTime.of(2026, 10, 29, 8, 0);
+        java.time.LocalDateTime t2 = java.time.LocalDateTime.of(2026, 10, 29, 9, 0);
+        java.time.LocalDateTime t3 = java.time.LocalDateTime.of(2026, 10, 29, 10, 0);
+
+        IncidentHistory h = new IncidentHistory(incident, "CREATED", "Ticket opened", "dispatcher");
+        ReflectionTestUtils.setField(h, "id", 1L);
+        h.setTimestamp(t1);
+
+        IncidentComment c = new IncidentComment(incident, "tech_lead", "Investigating link drop", t2);
+        ReflectionTestUtils.setField(c, "id", 1L);
+
+        Engineer eng = new Engineer();
+        eng.setName("Field Eng");
+        ServiceVisit v = new ServiceVisit(incident, eng, java.time.LocalDate.now(), "Cleaned fibre optic tips");
+        ReflectionTestUtils.setField(v, "id", 1L);
+        v.setCheckInAt(t3);
+
+        when(incidentHistoryRepository.findByIncidentIdOrderByTimestampAsc(1L)).thenReturn(List.of(h));
+        when(incidentCommentRepository.findByIncidentIdOrderByCreatedAtAsc(1L)).thenReturn(List.of(c));
+        when(serviceVisitRepository.findByIncidentIdOrderByVisitDateAscCheckInAtAscCreatedAtAsc(1L)).thenReturn(List.of(v));
+
+        List<TimelineItemResponse> timeline = incidentService.getTimeline(1L);
+
+        assertEquals(3, timeline.size());
+        assertEquals("HISTORY", timeline.get(0).getItemType());
+        assertEquals("COMMENT", timeline.get(1).getItemType());
+        assertEquals("VISIT", timeline.get(2).getItemType());
+        assertEquals(t1, timeline.get(0).getTimestamp());
+        assertEquals(t2, timeline.get(1).getTimestamp());
+        assertEquals(t3, timeline.get(2).getTimestamp());
     }
 }

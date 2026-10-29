@@ -10,21 +10,31 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @ActiveProfiles("test")
 public abstract class BaseIntegrationTest {
 
-    public static final PostgreSQLContainer<?> postgres;
+    public static PostgreSQLContainer<?> postgres;
+    private static boolean useTestcontainers = false;
 
     static {
-        postgres = new PostgreSQLContainer<>("postgres:17-alpine")
-                .withDatabaseName("fieldservice_test")
-                .withUsername("testuser")
-                .withPassword("testpass");
-        postgres.start();
+        try {
+            postgres = new PostgreSQLContainer<>("postgres:17-alpine")
+                    .withDatabaseName("fieldservice_test")
+                    .withUsername("testuser")
+                    .withPassword("testpass");
+            postgres.start();
+            useTestcontainers = true;
+        } catch (Throwable t) {
+            System.err.println("Docker environment not available; falling back to local PostgreSQL datasource: " + t.getMessage());
+            postgres = null;
+            useTestcontainers = false;
+        }
     }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
+        if (useTestcontainers && postgres != null && postgres.isRunning()) {
+            registry.add("spring.datasource.url", postgres::getJdbcUrl);
+            registry.add("spring.datasource.username", postgres::getUsername);
+            registry.add("spring.datasource.password", postgres::getPassword);
+            registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
+        }
     }
 }

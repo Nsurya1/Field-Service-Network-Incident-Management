@@ -25,12 +25,12 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    @DisplayName("Verify Flyway migrations V1 through V6 are applied and registered in test database")
+    @DisplayName("Verify Flyway migrations V1 through V7 are applied and registered in test database")
     void shouldApplyAndTrackFlywayMigrations() {
         assertNotNull(flyway, "Flyway bean must be initialized by Spring Boot");
 
         MigrationInfo[] applied = flyway.info().applied();
-        assertTrue(applied.length >= 6, "Migrations V1 through V6 must be applied");
+        assertTrue(applied.length >= 7, "Migrations V1 through V7 must be applied");
 
         List<String> versions = Arrays.stream(applied)
                 .map(info -> info.getVersion().getVersion())
@@ -42,6 +42,7 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
         assertTrue(versions.contains("4"), "Migration V4 version and locking must be recorded");
         assertTrue(versions.contains("5"), "Migration V5 engineer fields must be recorded");
         assertTrue(versions.contains("6"), "Migration V6 service visits and resolution must be recorded");
+        assertTrue(versions.contains("7"), "Migration V7 performed_by and incident comments must be recorded");
 
         // Verify all applied migrations have status SUCCESS
         for (MigrationInfo info : applied) {
@@ -110,5 +111,19 @@ class FlywayMigrationIntegrationTest extends BaseIntegrationTest {
                 Integer.class
         );
         assertEquals(1, serviceVisitsTableCount, "service_visits table must exist in database");
+
+        // Verify performed_by column exists on incident_history table
+        Integer performedByCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'incident_history' AND column_name = 'performed_by'",
+                Integer.class
+        );
+        assertEquals(1, performedByCount, "incident_history table must contain performed_by column");
+
+        // Verify incident_comments table exists
+        Integer commentsTableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'incident_comments'",
+                Integer.class
+        );
+        assertEquals(1, commentsTableCount, "incident_comments table must exist in database");
     }
 }

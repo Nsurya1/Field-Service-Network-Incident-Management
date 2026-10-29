@@ -582,4 +582,104 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$").isArray())
                 .andExpect(jsonPath("$.length()").value(2));
     }
+
+    @Test
+    @DisplayName("Verify comments & timeline RBAC: ADMIN/MANAGER/assigned ENGINEER allowed to comment, VIEWER/peer ENGINEER forbidden")
+    void shouldEnforceRbacOnCommentsAndTimelineEndpoints() throws Exception {
+        Engineer eng1 = new Engineer();
+        eng1.setName("Comment Eng One");
+        eng1.setEmail("ceng1@test.com");
+        eng1.setSpecialization("Optical");
+        eng1 = engineerRepository.save(eng1);
+
+        Engineer eng2 = new Engineer();
+        eng2.setName("Comment Eng Two");
+        eng2.setEmail("ceng2@test.com");
+        eng2.setSpecialization("Core");
+        eng2 = engineerRepository.save(eng2);
+
+        User userEng1 = new User("user_eng1_comment", "ceng1_u@test.com", "pass", Role.ROLE_ENGINEER, eng1);
+        userRepository.save(userEng1);
+
+        User userEng2 = new User("user_eng2_comment", "ceng2_u@test.com", "pass", Role.ROLE_ENGINEER, eng2);
+        userRepository.save(userEng2);
+
+        User manager = userRepository.save(new User("manager_comment", "mgr_c@test.com", "pass", Role.ROLE_MANAGER));
+        User viewer = userRepository.save(new User("viewer_comment", "view_c@test.com", "pass", Role.ROLE_VIEWER));
+
+        String tokenEng1 = "Bearer " + jwtUtils.generateToken(userEng1);
+        String tokenEng2 = "Bearer " + jwtUtils.generateToken(userEng2);
+        String tokenManager = "Bearer " + jwtUtils.generateToken(manager);
+        String tokenViewer = "Bearer " + jwtUtils.generateToken(viewer);
+
+        Incident incident = new Incident();
+        incident.setTitle("Comment security test ticket");
+        incident.setDescription("Desc");
+        incident.setPriority(IncidentPriority.HIGH);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(eng1);
+        Incident savedInc = incidentRepository.save(incident);
+
+        String commentPayload = """
+            {
+                "text": "Tested primary fiber link signal strength"
+            }
+            """;
+
+        // 1. POST comment unauthenticated -> 401
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload))
+                .andExpect(status().isUnauthorized());
+
+        // 2. POST comment VIEWER -> 403 Forbidden
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .header("Authorization", tokenViewer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload))
+                .andExpect(status().isForbidden());
+
+        // 3. POST comment peer ENGINEER (eng2) on eng1's incident -> 403 Forbidden
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .header("Authorization", tokenEng2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Engineers can only comment on incidents assigned to them"));
+
+        // 4. POST comment assigned ENGINEER (eng1) -> 201 Created
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .header("Authorization", tokenEng1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(commentPayload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.author").value("user_eng1_comment"))
+                .andExpect(jsonPath("$.text").value("Tested primary fiber link signal strength"));
+
+        // 5. POST comment MANAGER -> 201 Created
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .header("Authorization", tokenManager)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "text": "Manager escalation note"
+                            }
+                            """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.author").value("manager_comment"));
+
+        // 6. GET comments -> VIEWER allowed (200 OK)
+        mockMvc.perform(get("/api/v1/incidents/" + savedInc.getId() + "/comments")
+                        .header("Authorization", tokenViewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2));
+
+        // 7. GET timeline -> VIEWER allowed (200 OK)
+        mockMvc.perform(get("/api/v1/incidents/" + savedInc.getId() + "/timeline")
+                        .header("Authorization", tokenViewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[?(@.itemType == 'COMMENT')]").exists());
+    }
 }

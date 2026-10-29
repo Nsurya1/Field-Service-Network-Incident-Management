@@ -22,6 +22,19 @@ class IncidentHistoryTest {
         assertEquals("CREATED", history.getAction());
         assertEquals("Incident created", history.getDescription());
         assertEquals(incident, history.getIncident());
+        assertEquals("system", history.getPerformedBy());
+    }
+
+    @Test
+    void shouldCreateIncidentHistoryWithPerformedByConstructor() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+
+        IncidentHistory history = new IncidentHistory(incident, "ASSIGNED", "Assigned to Bob", "dispatcher");
+        assertEquals("dispatcher", history.getPerformedBy());
+
+        IncidentHistory fallback = new IncidentHistory(incident, "ASSIGNED", "Assigned to Bob", "   ");
+        assertEquals("system", fallback.getPerformedBy());
     }
 
     @Test
@@ -29,11 +42,13 @@ class IncidentHistoryTest {
         IncidentHistory history = new IncidentHistory();
         history.setAction("ASSIGNED");
         history.setDescription("Assigned to Bob");
+        history.setPerformedBy("admin_user");
         LocalDateTime now = LocalDateTime.now();
         history.setTimestamp(now);
 
         assertEquals("ASSIGNED", history.getAction());
         assertEquals("Assigned to Bob", history.getDescription());
+        assertEquals("admin_user", history.getPerformedBy());
         assertEquals(now, history.getTimestamp());
     }
 

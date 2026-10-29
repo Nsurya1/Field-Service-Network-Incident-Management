@@ -21,6 +21,9 @@ public class IncidentHistory {
     @Column(nullable = false, length = 255)
     private String description;
 
+    @Column(name = "performed_by", length = 50)
+    private String performedBy;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime timestamp;
 
@@ -28,9 +31,14 @@ public class IncidentHistory {
     }
 
     public IncidentHistory(Incident incident, String action, String description) {
+        this(incident, action, description, "system");
+    }
+
+    public IncidentHistory(Incident incident, String action, String description, String performedBy) {
         this.incident = incident;
         this.action = action;
         this.description = description;
+        this.performedBy = performedBy != null && !performedBy.isBlank() ? performedBy : "system";
     }
 
     @PrePersist
@@ -74,5 +82,13 @@ public class IncidentHistory {
 
     public void setTimestamp(LocalDateTime timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getPerformedBy() {
+        return performedBy;
+    }
+
+    public void setPerformedBy(String performedBy) {
+        this.performedBy = performedBy;
     }
 }

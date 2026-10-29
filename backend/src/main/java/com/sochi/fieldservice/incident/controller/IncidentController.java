@@ -2,10 +2,13 @@ package com.sochi.fieldservice.incident.controller;
 
 import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.AssignIncidentRequest;
+import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentHistoryResponse;
 import com.sochi.fieldservice.incident.dto.IncidentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
@@ -42,10 +45,12 @@ public class IncidentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public IncidentResponse createIncident(
-            @Valid @RequestBody CreateIncidentRequest request) {
+            @Valid @RequestBody CreateIncidentRequest request,
+            Principal principal) {
 
+        String username = principal != null ? principal.getName() : null;
         return new IncidentResponse(
-                incidentService.createIncident(request));
+                incidentService.createIncident(request, username));
     }
 
     @GetMapping
@@ -141,16 +146,21 @@ public class IncidentController {
     @PatchMapping("/{id}/assign")
     public IncidentResponse assignIncident(
             @PathVariable Long id,
-            @Valid @RequestBody AssignIncidentRequest request) {
+            @Valid @RequestBody AssignIncidentRequest request,
+            Principal principal) {
 
+        String username = principal != null ? principal.getName() : null;
         return new IncidentResponse(
                 incidentService.assignIncident(
-                        id, request.getEngineerId()));
+                        id, request.getEngineerId(), username));
     }
 
     @PatchMapping("/{id}/unassign")
-    public IncidentResponse unassignIncident(@PathVariable Long id) {
-        return new IncidentResponse(incidentService.unassignIncident(id));
+    public IncidentResponse unassignIncident(
+            @PathVariable Long id,
+            Principal principal) {
+        String username = principal != null ? principal.getName() : null;
+        return new IncidentResponse(incidentService.unassignIncident(id, username));
     }
 
     @PostMapping("/{id}/visits")
@@ -166,5 +176,25 @@ public class IncidentController {
     @GetMapping("/{id}/visits")
     public List<ServiceVisitResponse> getServiceVisits(@PathVariable Long id) {
         return serviceVisitService.getVisitsForIncident(id);
+    }
+
+    @PostMapping("/{id}/comments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public IncidentCommentResponse addComment(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateIncidentCommentRequest request,
+            Principal principal) {
+        String username = principal != null ? principal.getName() : null;
+        return incidentService.addComment(id, request, username);
+    }
+
+    @GetMapping("/{id}/comments")
+    public List<IncidentCommentResponse> getComments(@PathVariable Long id) {
+        return incidentService.getComments(id);
+    }
+
+    @GetMapping("/{id}/timeline")
+    public List<TimelineItemResponse> getTimeline(@PathVariable Long id) {
+        return incidentService.getTimeline(id);
     }
 }

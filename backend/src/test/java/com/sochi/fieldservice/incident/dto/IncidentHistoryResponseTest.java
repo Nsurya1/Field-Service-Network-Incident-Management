@@ -16,7 +16,7 @@ class IncidentHistoryResponseTest {
         Incident incident = mock(Incident.class);
         when(incident.getId()).thenReturn(10L);
 
-        IncidentHistory history = new IncidentHistory(incident, "STATUS_CHANGED", "Moved to IN_PROGRESS");
+        IncidentHistory history = new IncidentHistory(incident, "STATUS_CHANGED", "Moved to IN_PROGRESS", "tech_lead");
         LocalDateTime now = LocalDateTime.now();
         history.setTimestamp(now);
 
@@ -25,8 +25,16 @@ class IncidentHistoryResponseTest {
         assertEquals(10L, response.getIncidentId());
         assertEquals("STATUS_CHANGED", response.getAction());
         assertEquals("Moved to IN_PROGRESS", response.getDescription());
+        assertEquals("tech_lead", response.getPerformedBy());
         assertEquals(now, response.getTimestamp());
         assertNull(response.getId());
+
+        IncidentHistoryResponse explicit = new IncidentHistoryResponse(1L, 10L, "CREATED", "Opened", "dispatcher", now);
+        assertEquals(1L, explicit.getId());
+        assertEquals("dispatcher", explicit.getPerformedBy());
+
+        IncidentHistoryResponse empty = new IncidentHistoryResponse();
+        assertNull(empty.getId());
     }
 
     @Test
@@ -36,5 +44,6 @@ class IncidentHistoryResponseTest {
 
         assertNull(response.getIncidentId());
         assertEquals("CREATED", response.getAction());
+        assertEquals("system", response.getPerformedBy());
     }
 }

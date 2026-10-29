@@ -91,8 +91,10 @@ Prevents engineer burnout and dispatch bottlenecks with strict concurrency contr
   - `GET /api/v1/incidents/{id}/visits`: Retrieve chronological list of visits for an incident.
 - **Interactive UI Integration:** The React incident details modal dynamically renders Root Cause badges, resolution summaries, and a comprehensive On-Site Service Visits timeline with check-in/out timestamps and an inline logging form.
 
-### 6. Immutable Audit Trail & Event Timeline
-Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`, `UNASSIGNED`) automatically records a chronological event log in `incident_history`, accessible via `GET /api/v1/incidents/{id}/history`.
+### 6. Comprehensive Audit Trail, Comments & Unified Activity Timeline
+- **Actor Attribution (`performedBy`):** Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`, `UNASSIGNED`, `COMMENT_ADDED`) records the authenticated principal's username in `incident_history.performed_by`.
+- **Collaborative Incident Comments (`incident_comments`):** Stakeholders can post discussion notes and progress logs (`POST /api/v1/incidents/{id}/comments`), with strict ownership enforcement (engineers can only comment on assigned tickets).
+- **Unified Timeline Stream (`GET /api/v1/incidents/{id}/timeline`):** Merges audit history records, technician comments, and on-site service visits into a single, chronologically sorted activity timeline displayed dynamically in the React dashboard modal.
 
 ### 7. High-Performance Dashboard Analytics
 Aggregated metrics (`GET /api/v1/incidents/stats`) calculate total volume, status distribution, active tickets, and breached SLAs using database-level aggregate SQL queries.
@@ -160,6 +162,9 @@ The codebase is hardened by **185 automated unit and integration tests** verifie
 | `PATCH`| `/api/v1/incidents/{id}/status` | Advance status in lifecycle (requires resolution notes if RESOLVED) | ADMIN, MANAGER, ENGINEER |
 | `GET` | `/api/v1/incidents/{id}/visits` | Retrieve all on-site service visits for incident | ADMIN, MANAGER, ENGINEER, VIEWER |
 | `POST` | `/api/v1/incidents/{id}/visits` | Log an on-site service visit | ADMIN, MANAGER, ENGINEER |
+| `GET` | `/api/v1/incidents/{id}/comments` | Retrieve comments for incident | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `POST` | `/api/v1/incidents/{id}/comments` | Post a comment on incident | ADMIN, MANAGER, ENGINEER |
+| `GET` | `/api/v1/incidents/{id}/timeline` | Retrieve merged chronological activity timeline | ADMIN, MANAGER, ENGINEER, VIEWER |
 
 ### Engineer Endpoints (Secured)
 | Method | Endpoint | Description | Role Required |

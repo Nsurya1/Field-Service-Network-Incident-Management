@@ -3,19 +3,25 @@ package com.sochi.fieldservice.incident;
 import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.service.EngineerService;
+import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
+import com.sochi.fieldservice.incident.entity.IncidentComment;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.entity.RootCause;
+import com.sochi.fieldservice.incident.repository.IncidentCommentRepository;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
 import com.sochi.fieldservice.user.entity.Role;
 import com.sochi.fieldservice.user.entity.User;
 import com.sochi.fieldservice.user.repository.UserRepository;
+import com.sochi.fieldservice.visit.repository.ServiceVisitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -36,21 +42,32 @@ public class IncidentService {
     private final EngineerService engineerService;
     private final IncidentHistoryRepository incidentHistoryRepository;
     private final UserRepository userRepository;
+    private final IncidentCommentRepository incidentCommentRepository;
+    private final ServiceVisitRepository serviceVisitRepository;
     private static final Logger logger = LoggerFactory.getLogger(IncidentService.class);
 
     public IncidentService(
             IncidentRepository incidentRepository,
             EngineerService engineerService,
             IncidentHistoryRepository incidentHistoryRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            IncidentCommentRepository incidentCommentRepository,
+            ServiceVisitRepository serviceVisitRepository) {
         this.incidentRepository = incidentRepository;
         this.engineerService = engineerService;
         this.incidentHistoryRepository = incidentHistoryRepository;
         this.userRepository = userRepository;
+        this.incidentCommentRepository = incidentCommentRepository;
+        this.serviceVisitRepository = serviceVisitRepository;
     }
 
     @Transactional
     public Incident createIncident(CreateIncidentRequest request) {
+        return createIncident(request, null);
+    }
+
+    @Transactional
+    public Incident createIncident(CreateIncidentRequest request, String username) {
         Incident incident = new Incident();
 
         incident.setTitle(request.getTitle().trim());
@@ -72,7 +89,8 @@ public class IncidentService {
         incidentHistoryRepository.save(new IncidentHistory(
                 savedIncident,
                 "CREATED",
-                "Incident created with status OPEN"
+                "Incident created with status OPEN",
+                username != null ? username : "system"
         ));
 
         return savedIncident;
@@ -92,7 +110,11 @@ public class IncidentService {
 
     @Transactional
     public Incident assignIncident(Long incidentId, Long engineerId) {
+        return assignIncident(incidentId, engineerId, null);
+    }
 
+    @Transactional
+    public Incident assignIncident(Long incidentId, Long engineerId, String username) {
         Incident incident = getIncidentById(incidentId);
 
         if (incident.getStatus() == IncidentStatus.CLOSED) {
@@ -142,7 +164,8 @@ public class IncidentService {
         incidentHistoryRepository.save(new IncidentHistory(
                 savedIncident,
                 "ASSIGNED",
-                "Incident assigned to engineer: " + engineer.getName()
+                "Incident assigned to engineer: " + engineer.getName(),
+                username != null ? username : "system"
         ));
 
         return savedIncident;
@@ -150,6 +173,11 @@ public class IncidentService {
 
     @Transactional
     public Incident unassignIncident(Long incidentId) {
+        return unassignIncident(incidentId, null);
+    }
+
+    @Transactional
+    public Incident unassignIncident(Long incidentId, String username) {
         Incident incident = getIncidentById(incidentId);
 
         if (incident.getStatus() == IncidentStatus.CLOSED || incident.getStatus() == IncidentStatus.RESOLVED) {
@@ -173,7 +201,8 @@ public class IncidentService {
                 "UNASSIGNED",
                 previousEngineer != null
                         ? "Incident unassigned from engineer: " + previousEngineer.getName()
-                        : "Incident unassigned"
+                        : "Incident unassigned",
+                username != null ? username : "system"
         ));
 
         return savedIncident;
@@ -372,10 +401,94 @@ public class IncidentService {
         incidentHistoryRepository.save(new IncidentHistory(
                 savedIncident,
                 "STATUS_CHANGED",
-                description
+                description,
+                username != null ? username : "system"
         ));
 
         return savedIncident;
+    }
+
+    @Transactional
+    public IncidentCommentResponse addComment(Long incidentId, CreateIncidentCommentRequest request, String username) {
+        Incident incident = getIncidentById(incidentId);
+
+        if (username == null || username.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required to add comments");
+        }
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found with username: " + username));
+
+        if (user.getRole() == Role.ROLE_VIEWER) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Viewers have read-only access and cannot post comments");
+        }
+
+        if (user.getRole() == Role.ROLE_ENGINEER) {
+            if (incident.getAssignedEngineer() == null ||
+                    user.getEngineer() == null ||
+                    !incident.getAssignedEngineer().getId().equals(user.getEngineer().getId())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Engineers can only comment on incidents assigned to them");
+            }
+        }
+
+        IncidentComment comment = new IncidentComment(incident, username, request.getText().trim());
+        IncidentComment savedComment = incidentCommentRepository.save(comment);
+
+        String snippet = request.getText().trim().length() > 50
+                ? request.getText().trim().substring(0, 47) + "..."
+                : request.getText().trim();
+
+        incidentHistoryRepository.save(new IncidentHistory(
+                incident,
+                "COMMENT_ADDED",
+                "Comment added by " + username + ": " + snippet,
+                username
+        ));
+
+        return new IncidentCommentResponse(savedComment);
+    }
+
+    public List<IncidentCommentResponse> getComments(Long incidentId) {
+        if (!incidentRepository.existsById(incidentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found with ID: " + incidentId);
+        }
+        if (incidentCommentRepository == null) {
+            return List.of();
+        }
+        return incidentCommentRepository.findByIncidentIdOrderByCreatedAtAsc(incidentId)
+                .stream()
+                .map(IncidentCommentResponse::new)
+                .toList();
+    }
+
+    public List<TimelineItemResponse> getTimeline(Long incidentId) {
+        if (!incidentRepository.existsById(incidentId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Incident not found with ID: " + incidentId);
+        }
+
+        List<TimelineItemResponse> timeline = new java.util.ArrayList<>();
+
+        // Add history events
+        incidentHistoryRepository.findByIncidentIdOrderByTimestampAsc(incidentId).stream()
+                .map(TimelineItemResponse::fromHistory)
+                .forEach(timeline::add);
+
+        // Add comments
+        if (incidentCommentRepository != null) {
+            incidentCommentRepository.findByIncidentIdOrderByCreatedAtAsc(incidentId).stream()
+                    .map(TimelineItemResponse::fromComment)
+                    .forEach(timeline::add);
+        }
+
+        // Add service visits
+        if (serviceVisitRepository != null) {
+            serviceVisitRepository.findByIncidentIdOrderByVisitDateAscCheckInAtAscCreatedAtAsc(incidentId).stream()
+                    .map(TimelineItemResponse::fromServiceVisit)
+                    .forEach(timeline::add);
+        }
+
+        java.util.Collections.sort(timeline);
+        return timeline;
     }
 
     public List<IncidentHistory> getIncidentHistory(Long incidentId) {

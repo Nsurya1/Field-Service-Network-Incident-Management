@@ -4,8 +4,11 @@ import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.incident.IncidentService;
+import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import com.sochi.fieldservice.incident.entity.Incident;
@@ -15,6 +18,9 @@ import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.entity.RootCause;
 import java.util.List;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
+import com.sochi.fieldservice.user.entity.Role;
+import com.sochi.fieldservice.user.entity.User;
+import com.sochi.fieldservice.user.repository.UserRepository;
 import com.sochi.fieldservice.visit.dto.CreateServiceVisitRequest;
 import com.sochi.fieldservice.visit.dto.ServiceVisitResponse;
 import com.sochi.fieldservice.visit.service.ServiceVisitService;
@@ -48,6 +54,9 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private ServiceVisitService serviceVisitService;
+
+    @Autowired
+    private UserRepository userRepository;
 
     @Test
     @DisplayName("Verify Spring context starts and connects to PostgreSQL test database")
@@ -635,5 +644,97 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
                 incident.getId()
         );
         assertEquals(1, count);
+    }
+
+    @Test
+    @DisplayName("Verify performedBy is tracked in PostgreSQL database across all incident actions")
+    void shouldRecordPerformedByOnAllIncidentHistoryActionsInDatabase() {
+        Engineer tech = new Engineer();
+        tech.setName("History Tech");
+        tech.setEmail("htech@test.com");
+        tech.setSpecialization("Optical");
+        tech = engineerRepository.save(tech);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("History Audit Integration Test");
+        req.setDescription("Desc");
+        req.setPriority(IncidentPriority.HIGH);
+
+        // 1. Create with principal
+        Incident incident = incidentService.createIncident(req, "dispatcher_sam");
+        Long id = incident.getId();
+
+        // 2. Assign with principal
+        incidentService.assignIncident(id, tech.getId(), "manager_amy");
+
+        // 3. Status change with principal
+        incidentService.updateIncidentStatus(id, IncidentStatus.IN_PROGRESS, "tech_bob");
+
+        // 4. Unassign with principal
+        incidentService.unassignIncident(id, "admin_clara");
+
+        List<IncidentHistory> history = incidentService.getIncidentHistory(id);
+        assertEquals(4, history.size());
+        assertEquals("dispatcher_sam", history.get(0).getPerformedBy());
+        assertEquals("manager_amy", history.get(1).getPerformedBy());
+        assertEquals("tech_bob", history.get(2).getPerformedBy());
+        assertEquals("admin_clara", history.get(3).getPerformedBy());
+
+        // Verify column in PostgreSQL DB directly
+        List<String> actors = jdbcTemplate.query(
+                "SELECT performed_by FROM incident_history WHERE incident_id = ? ORDER BY timestamp ASC",
+                (rs, rowNum) -> rs.getString("performed_by"),
+                id
+        );
+        assertEquals(List.of("dispatcher_sam", "manager_amy", "tech_bob", "admin_clara"), actors);
+    }
+
+    @Test
+    @DisplayName("Verify comments and service visits merge into unified timeline sorted chronologically in PostgreSQL")
+    void shouldAddCommentAndRetrieveUnifiedTimelineInDatabase() {
+        Engineer eng = new Engineer();
+        eng.setName("Timeline Tech");
+        eng.setEmail("timelinetech@test.com");
+        eng.setSpecialization("Core");
+        eng = engineerRepository.save(eng);
+
+        User techUser = new User("timeline_tech", "ttech@test.com", "pass", Role.ROLE_ENGINEER, eng);
+        userRepository.save(techUser);
+
+        User managerUser = new User("timeline_mgr", "tmgr@test.com", "pass", Role.ROLE_MANAGER);
+        userRepository.save(managerUser);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Timeline Aggregation Ticket");
+        req.setDescription("Desc");
+        req.setPriority(IncidentPriority.CRITICAL);
+        Incident incident = incidentService.createIncident(req, "timeline_mgr");
+        Long id = incident.getId();
+
+        incidentService.assignIncident(id, eng.getId(), "timeline_mgr");
+
+        // Add a comment
+        CreateIncidentCommentRequest commentReq = new CreateIncidentCommentRequest("NOC dispatched field engineer");
+        IncidentCommentResponse commentResp = incidentService.addComment(id, commentReq, "timeline_mgr");
+        assertNotNull(commentResp.getId());
+        assertEquals("timeline_mgr", commentResp.getAuthor());
+
+        // Add a service visit
+        CreateServiceVisitRequest visitReq = new CreateServiceVisitRequest();
+        visitReq.setVisitDate(LocalDate.now());
+        visitReq.setWorkNotes("Checked chassis fans");
+        serviceVisitService.createVisit(id, visitReq, "timeline_tech");
+
+        // Fetch timeline
+        List<TimelineItemResponse> timeline = incidentService.getTimeline(id);
+        assertTrue(timeline.size() >= 4); // CREATED, ASSIGNED, COMMENT_ADDED (history), COMMENT, VISIT
+
+        boolean hasComment = timeline.stream().anyMatch(t -> "COMMENT".equals(t.getItemType()) && "timeline_mgr".equals(t.getActor()));
+        boolean hasVisit = timeline.stream().anyMatch(t -> "VISIT".equals(t.getItemType()) && "Timeline Tech".equals(t.getActor()));
+        boolean hasHistory = timeline.stream().anyMatch(t -> "HISTORY".equals(t.getItemType()) && "CREATED".equals(t.getAction()));
+
+        assertTrue(hasComment);
+        assertTrue(hasVisit);
+        assertTrue(hasHistory);
     }
 }

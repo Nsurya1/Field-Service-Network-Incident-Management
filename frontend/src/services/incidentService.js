@@ -49,4 +49,19 @@ export const incidentService = {
     const response = await api.post(`/incidents/${id}/visits`, visitData);
     return response.data;
   },
+
+  async getComments(id) {
+    const response = await api.get(`/incidents/${id}/comments`);
+    return response.data;
+  },
+
+  async addComment(id, text) {
+    const response = await api.post(`/incidents/${id}/comments`, { text });
+    return response.data;
+  },
+
+  async getTimeline(id) {
+    const response = await api.get(`/incidents/${id}/timeline`);
+    return response.data;
+  },
 };

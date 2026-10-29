@@ -2,8 +2,11 @@ package com.sochi.fieldservice.incident.controller;
 
 import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.AssignIncidentRequest;
+import com.sochi.fieldservice.incident.dto.CreateIncidentCommentRequest;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
+import com.sochi.fieldservice.incident.dto.IncidentCommentResponse;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.TimelineItemResponse;
 import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
@@ -198,7 +201,7 @@ class IncidentControllerTest {
         incident.setStatus(IncidentStatus.ASSIGNED);
         incident.setLocation("Bhopal");
 
-        when(incidentService.assignIncident(1L, 5L)).thenReturn(incident);
+        when(incidentService.assignIncident(eq(1L), eq(5L), any())).thenReturn(incident);
 
         mockMvc.perform(patch("/api/v1/incidents/1/assign")
                         .contentType("application/json")
@@ -213,7 +216,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.priority").value("CRITICAL"))
                 .andExpect(jsonPath("$.location").value("Bhopal"));
 
-        verify(incidentService).assignIncident(1L, 5L);
+        verify(incidentService).assignIncident(eq(1L), eq(5L), any());
     }
 
     @Test
@@ -249,7 +252,7 @@ class IncidentControllerTest {
         incident.setStatus(IncidentStatus.OPEN);
         incident.setLocation("Bhopal");
 
-        when(incidentService.createIncident(any(CreateIncidentRequest.class))).thenReturn(incident);
+        when(incidentService.createIncident(any(CreateIncidentRequest.class), any())).thenReturn(incident);
 
         mockMvc.perform(post("/api/v1/incidents")
                         .contentType("application/json")
@@ -267,7 +270,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.priority").value("CRITICAL"))
                 .andExpect(jsonPath("$.location").value("Bhopal"));
 
-        verify(incidentService).createIncident(any(CreateIncidentRequest.class));
+        verify(incidentService).createIncident(any(CreateIncidentRequest.class), any());
     }
 
     @Test
@@ -362,7 +365,7 @@ class IncidentControllerTest {
         incident.setTitle("Router failure");
         incident.setStatus(IncidentStatus.OPEN);
 
-        when(incidentService.unassignIncident(1L)).thenReturn(incident);
+        when(incidentService.unassignIncident(eq(1L), any())).thenReturn(incident);
 
         mockMvc.perform(patch("/api/v1/incidents/1/unassign"))
                 .andExpect(status().isOk())
@@ -370,7 +373,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.status").value("OPEN"))
                 .andExpect(jsonPath("$.assignedEngineerId").doesNotExist());
 
-        verify(incidentService).unassignIncident(1L);
+        verify(incidentService).unassignIncident(eq(1L), any());
     }
 
     @Test
@@ -458,5 +461,62 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.status").value("RESOLVED"))
                 .andExpect(jsonPath("$.resolutionNotes").value("Replaced failed line card"))
                 .andExpect(jsonPath("$.rootCause").value("HARDWARE_FAILURE"));
+    }
+
+    @Test
+    void shouldAddComment() throws Exception {
+        IncidentCommentResponse commentResp = new IncidentCommentResponse(
+                10L, 1L, "admin", "Tested uplink latency after fiber splice", java.time.LocalDateTime.now()
+        );
+
+        when(incidentService.addComment(eq(1L), any(CreateIncidentCommentRequest.class), any()))
+                .thenReturn(commentResp);
+
+        mockMvc.perform(post("/api/v1/incidents/1/comments")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "text": "Tested uplink latency after fiber splice"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(jsonPath("$.author").value("admin"))
+                .andExpect(jsonPath("$.text").value("Tested uplink latency after fiber splice"));
+    }
+
+    @Test
+    void shouldGetComments() throws Exception {
+        IncidentCommentResponse commentResp = new IncidentCommentResponse(
+                10L, 1L, "admin", "Tested uplink latency", java.time.LocalDateTime.now()
+        );
+
+        when(incidentService.getComments(1L)).thenReturn(List.of(commentResp));
+
+        mockMvc.perform(get("/api/v1/incidents/1/comments"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].id").value(10))
+                .andExpect(jsonPath("$[0].author").value("admin"));
+
+        verify(incidentService).getComments(1L);
+    }
+
+    @Test
+    void shouldGetTimeline() throws Exception {
+        TimelineItemResponse item = new TimelineItemResponse(
+                "history-1", "HISTORY", "CREATED", "dispatcher", "Opened ticket", null, java.time.LocalDateTime.now()
+        );
+
+        when(incidentService.getTimeline(1L)).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/v1/incidents/1/timeline"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].id").value("history-1"))
+                .andExpect(jsonPath("$[0].itemType").value("HISTORY"))
+                .andExpect(jsonPath("$[0].actor").value("dispatcher"));
+
+        verify(incidentService).getTimeline(1L);
     }
 }
