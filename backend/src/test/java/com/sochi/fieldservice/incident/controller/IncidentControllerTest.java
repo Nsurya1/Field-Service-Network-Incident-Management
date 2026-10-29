@@ -9,7 +9,11 @@ import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
+import com.sochi.fieldservice.incident.entity.RootCause;
 import com.sochi.fieldservice.security.SecurityConfig;
+import com.sochi.fieldservice.visit.dto.CreateServiceVisitRequest;
+import com.sochi.fieldservice.visit.dto.ServiceVisitResponse;
+import com.sochi.fieldservice.visit.service.ServiceVisitService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -44,6 +48,9 @@ class IncidentControllerTest {
 
     @MockitoBean
     private IncidentService incidentService;
+
+    @MockitoBean
+    private ServiceVisitService serviceVisitService;
 
     @Test
     void shouldReturnEmptyIncidentPage() throws Exception {
@@ -146,13 +153,14 @@ class IncidentControllerTest {
     @Test
     void shouldUpdateIncidentStatus() throws Exception {
         Incident incident = new Incident();
+        incident.setId(1L);
         incident.setTitle("Router failure");
         incident.setDescription("Router is not responding");
         incident.setPriority(IncidentPriority.CRITICAL);
         incident.setStatus(IncidentStatus.RESOLVED);
         incident.setLocation("Bhopal");
 
-        when(incidentService.updateIncidentStatus(1L, IncidentStatus.RESOLVED))
+        when(incidentService.updateIncidentStatus(eq(1L), any(UpdateIncidentStatusRequest.class), any()))
                 .thenReturn(incident);
 
         mockMvc.perform(patch("/api/v1/incidents/1/status")
@@ -168,7 +176,7 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.priority").value("CRITICAL"))
                 .andExpect(jsonPath("$.location").value("Bhopal"));
 
-        verify(incidentService).updateIncidentStatus(1L, IncidentStatus.RESOLVED);
+        verify(incidentService).updateIncidentStatus(eq(1L), any(UpdateIncidentStatusRequest.class), any());
     }
 
     @Test
@@ -363,5 +371,92 @@ class IncidentControllerTest {
                 .andExpect(jsonPath("$.assignedEngineerId").doesNotExist());
 
         verify(incidentService).unassignIncident(1L);
+    }
+
+    @Test
+    void shouldCreateServiceVisit() throws Exception {
+        ServiceVisitResponse response = new ServiceVisitResponse(
+                10L,
+                1L,
+                2L,
+                "Alice Engineer",
+                java.time.LocalDate.now(),
+                java.time.LocalDateTime.now().minusHours(2),
+                java.time.LocalDateTime.now(),
+                "Replaced faulty transceiver module",
+                "Traffic rerouted and stable",
+                java.time.LocalDateTime.now()
+        );
+
+        when(serviceVisitService.createVisit(eq(1L), any(CreateServiceVisitRequest.class), any()))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/incidents/1/visits")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "visitDate": "2026-10-29",
+                                  "workNotes": "Replaced faulty transceiver module",
+                                  "resolutionNotes": "Traffic rerouted and stable"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(jsonPath("$.incidentId").value(1))
+                .andExpect(jsonPath("$.workNotes").value("Replaced faulty transceiver module"));
+    }
+
+    @Test
+    void shouldGetVisitsForIncident() throws Exception {
+        ServiceVisitResponse response = new ServiceVisitResponse(
+                10L,
+                1L,
+                2L,
+                "Alice Engineer",
+                java.time.LocalDate.now(),
+                null,
+                null,
+                "Inspecting physical links",
+                null,
+                java.time.LocalDateTime.now()
+        );
+
+        when(serviceVisitService.getVisitsForIncident(1L)).thenReturn(List.of(response));
+
+        mockMvc.perform(get("/api/v1/incidents/1/visits"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].id").value(10))
+                .andExpect(jsonPath("$[0].workNotes").value("Inspecting physical links"));
+
+        verify(serviceVisitService).getVisitsForIncident(1L);
+    }
+
+    @Test
+    void shouldUpdateIncidentStatusWithResolutionNotesAndRootCause() throws Exception {
+        Incident incident = new Incident();
+        incident.setId(1L);
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.RESOLVED);
+        incident.setResolutionNotes("Replaced failed line card");
+        incident.setRootCause(RootCause.HARDWARE_FAILURE);
+
+        when(incidentService.updateIncidentStatus(eq(1L), any(UpdateIncidentStatusRequest.class), any()))
+                .thenReturn(incident);
+
+        mockMvc.perform(patch("/api/v1/incidents/1/status")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "status": "RESOLVED",
+                                  "resolutionNotes": "Replaced failed line card",
+                                  "rootCause": "HARDWARE_FAILURE"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.status").value("RESOLVED"))
+                .andExpect(jsonPath("$.resolutionNotes").value("Replaced failed line card"))
+                .andExpect(jsonPath("$.rootCause").value("HARDWARE_FAILURE"));
     }
 }

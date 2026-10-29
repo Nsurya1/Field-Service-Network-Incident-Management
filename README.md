@@ -82,20 +82,30 @@ Prevents engineer burnout and dispatch bottlenecks with strict concurrency contr
 - **Availability & Active Guardrails:** Inactive (`active = false`) or off-duty (`availabilityStatus = OFF_DUTY`) technicians are strictly blocked from dispatch assignment with **HTTP 400 Bad Request**.
 - **Technician Profile & Status Management:** Authorized dispatchers and admins can modify technician specializations/availability (`PUT /api/v1/engineers/{id}`) and toggle active status (`PATCH /api/v1/engineers/{id}/active`).
 
-### 5. Immutable Audit Trail & Event Timeline
-Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`) automatically records a chronological event log in `incident_history`, accessible via `GET /api/v1/incidents/{id}/history`.
+### 5. Resolution Notes, Root Cause Analysis & On-Site Service Visits
+- **Mandatory Resolution Notes:** Transitioning an incident to `RESOLVED` strictly requires `resolutionNotes` with at least 10 characters (HTTP 400 Bad Request if missing or too short) to prevent closing tickets without documenting root cause or repair actions.
+- **Root Cause Categorization:** Incidents capture structured telecommunications root causes (`RootCause` enum: `HARDWARE_FAILURE`, `FIBER_CUT`, `POWER_OUTAGE`, `CONFIGURATION_ERROR`, `FIRMWARE_BUG`, `ENVIRONMENTAL`, `OPERATOR_ERROR`, `OTHER`).
+- **On-Site Service Visits (`service_visits`):** Tracks field engineer visits with `incident_id`, `engineer_id`, `visit_date`, `check_in_at`, `check_out_at`, `work_notes`, and `resolution_notes`.
+- **Service Visit Endpoints:**
+  - `POST /api/v1/incidents/{id}/visits`: Log a visit with check-in/out times and work logs (ADMIN, MANAGER, and assigned ENGINEER).
+  - `GET /api/v1/incidents/{id}/visits`: Retrieve chronological list of visits for an incident.
+- **Interactive UI Integration:** The React incident details modal dynamically renders Root Cause badges, resolution summaries, and a comprehensive On-Site Service Visits timeline with check-in/out timestamps and an inline logging form.
 
-### 6. High-Performance Dashboard Analytics
+### 6. Immutable Audit Trail & Event Timeline
+Every lifecycle event (`CREATED`, `ASSIGNED`, `STATUS_CHANGED`, `UNASSIGNED`) automatically records a chronological event log in `incident_history`, accessible via `GET /api/v1/incidents/{id}/history`.
+
+### 7. High-Performance Dashboard Analytics
 Aggregated metrics (`GET /api/v1/incidents/stats`) calculate total volume, status distribution, active tickets, and breached SLAs using database-level aggregate SQL queries.
 
-### 7. Role-Based Access Control (RBAC) & Ownership Security
+### 8. Role-Based Access Control (RBAC) & Ownership Security
 - **ROLE_ADMIN:** Full system access (create engineers, reassign incidents, manage users, view stats).
 - **ROLE_MANAGER:** Team dispatch (create & assign incidents, view engineers and analytics).
 - **ROLE_ENGINEER:** Field technician with ownership-based access control:
   - `GET /api/v1/incidents` returns only tickets assigned to the authenticated engineer.
   - `GET /api/v1/incidents/mine` provides direct access to the technician's active workload.
   - `PATCH /api/v1/incidents/{id}/status` strictly permits status progression on tickets assigned to them (rejects with **HTTP 403 Forbidden** on unassigned or peer tickets).
-- **ROLE_VIEWER:** Read-only stakeholder access (view all incidents, event history, and stats; mutations rejected with **HTTP 403 Forbidden**).
+  - `POST /api/v1/incidents/{id}/visits` permits logging service visits for tickets assigned to them.
+- **ROLE_VIEWER:** Read-only stakeholder access (view all incidents, service visits, event history, and stats; mutations rejected with **HTTP 403 Forbidden**).
 - Password security enforced via `BCryptPasswordEncoder`.
 
 ---
@@ -147,7 +157,9 @@ The codebase is hardened by **185 automated unit and integration tests** verifie
 | `POST` | `/api/v1/incidents` | Create a new network incident | ADMIN, MANAGER |
 | `PATCH`| `/api/v1/incidents/{id}/assign` | Assign incident to field engineer | ADMIN, MANAGER |
 | `PATCH`| `/api/v1/incidents/{id}/unassign` | Unassign incident from engineer (resets to OPEN) | ADMIN, MANAGER |
-| `PATCH`| `/api/v1/incidents/{id}/status` | Advance status in lifecycle | ADMIN, MANAGER, ENGINEER |
+| `PATCH`| `/api/v1/incidents/{id}/status` | Advance status in lifecycle (requires resolution notes if RESOLVED) | ADMIN, MANAGER, ENGINEER |
+| `GET` | `/api/v1/incidents/{id}/visits` | Retrieve all on-site service visits for incident | ADMIN, MANAGER, ENGINEER, VIEWER |
+| `POST` | `/api/v1/incidents/{id}/visits` | Log an on-site service visit | ADMIN, MANAGER, ENGINEER |
 
 ### Engineer Endpoints (Secured)
 | Method | Endpoint | Description | Role Required |

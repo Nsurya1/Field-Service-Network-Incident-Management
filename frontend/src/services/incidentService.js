@@ -39,4 +39,14 @@ export const incidentService = {
     const response = await api.get(`/incidents/${id}/history`);
     return response.data;
   },
+
+  async getVisits(id) {
+    const response = await api.get(`/incidents/${id}/visits`);
+    return response.data;
+  },
+
+  async createVisit(id, visitData) {
+    const response = await api.post(`/incidents/${id}/visits`, visitData);
+    return response.data;
+  },
 };

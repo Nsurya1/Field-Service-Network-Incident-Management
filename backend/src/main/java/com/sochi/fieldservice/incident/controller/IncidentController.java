@@ -10,6 +10,9 @@ import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
+import com.sochi.fieldservice.visit.dto.CreateServiceVisitRequest;
+import com.sochi.fieldservice.visit.dto.ServiceVisitResponse;
+import com.sochi.fieldservice.visit.service.ServiceVisitService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,9 +30,13 @@ import java.util.List;
 public class IncidentController {
 
     private final IncidentService incidentService;
+    private final ServiceVisitService serviceVisitService;
 
-    public IncidentController(IncidentService incidentService) {
+    public IncidentController(
+            IncidentService incidentService,
+            ServiceVisitService serviceVisitService) {
         this.incidentService = incidentService;
+        this.serviceVisitService = serviceVisitService;
     }
 
     @PostMapping
@@ -127,11 +134,7 @@ public class IncidentController {
             Principal principal) {
 
         String username = principal != null ? principal.getName() : null;
-
-        Incident result = (username != null)
-                ? incidentService.updateIncidentStatus(id, request.getStatus(), username)
-                : incidentService.updateIncidentStatus(id, request.getStatus());
-
+        Incident result = incidentService.updateIncidentStatus(id, request, username);
         return new IncidentResponse(result);
     }
 
@@ -148,5 +151,20 @@ public class IncidentController {
     @PatchMapping("/{id}/unassign")
     public IncidentResponse unassignIncident(@PathVariable Long id) {
         return new IncidentResponse(incidentService.unassignIncident(id));
+    }
+
+    @PostMapping("/{id}/visits")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ServiceVisitResponse createServiceVisit(
+            @PathVariable Long id,
+            @Valid @RequestBody CreateServiceVisitRequest request,
+            Principal principal) {
+        String username = principal != null ? principal.getName() : null;
+        return serviceVisitService.createVisit(id, request, username);
+    }
+
+    @GetMapping("/{id}/visits")
+    public List<ServiceVisitResponse> getServiceVisits(@PathVariable Long id) {
+        return serviceVisitService.getVisitsForIncident(id);
     }
 }

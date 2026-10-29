@@ -6,13 +6,18 @@ import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.incident.IncidentService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
+import com.sochi.fieldservice.incident.entity.RootCause;
 import java.util.List;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
+import com.sochi.fieldservice.visit.dto.CreateServiceVisitRequest;
+import com.sochi.fieldservice.visit.dto.ServiceVisitResponse;
+import com.sochi.fieldservice.visit.service.ServiceVisitService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +45,9 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private EngineerRepository engineerRepository;
+
+    @Autowired
+    private ServiceVisitService serviceVisitService;
 
     @Test
     @DisplayName("Verify Spring context starts and connects to PostgreSQL test database")
@@ -159,9 +167,16 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
 
         // Lifecycle: ASSIGNED -> IN_PROGRESS -> RESOLVED
         incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS);
-        Incident updated = incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.RESOLVED);
+        Incident updated = incidentService.updateIncidentStatus(
+                incident.getId(),
+                IncidentStatus.RESOLVED,
+                "Replaced faulty optical fiber link",
+                RootCause.FIBER_CUT
+        );
 
         assertEquals(IncidentStatus.RESOLVED, updated.getStatus());
+        assertEquals("Replaced faulty optical fiber link", updated.getResolutionNotes());
+        assertEquals(RootCause.FIBER_CUT, updated.getRootCause());
 
         Incident reloaded = incidentRepository.findById(incident.getId()).orElseThrow();
         assertEquals(IncidentStatus.RESOLVED, reloaded.getStatus());
@@ -221,7 +236,12 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS);
 
         // 4. Update status -> 4th history entry (STATUS_CHANGED: IN_PROGRESS -> RESOLVED)
-        incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.RESOLVED);
+        incidentService.updateIncidentStatus(
+                incident.getId(),
+                IncidentStatus.RESOLVED,
+                "Resolved fiber attenuation",
+                RootCause.FIBER_CUT
+        );
 
         // Retrieve audit trail from database
         List<IncidentHistory> history = incidentService.getIncidentHistory(incident.getId());
@@ -288,7 +308,12 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         Incident inc4 = incidentService.createIncident(req4);
         incidentService.assignIncident(inc4.getId(), savedEngineer.getId());
         incidentService.updateIncidentStatus(inc4.getId(), IncidentStatus.IN_PROGRESS);
-        incidentService.updateIncidentStatus(inc4.getId(), IncidentStatus.RESOLVED);
+        incidentService.updateIncidentStatus(
+                inc4.getId(),
+                IncidentStatus.RESOLVED,
+                "Packet drop resolved by restart and reload",
+                RootCause.OTHER
+        );
 
         // 5. Create an SLA-breached active incident (deadline in the past)
         CreateIncidentRequest req5 = new CreateIncidentRequest();
@@ -350,7 +375,12 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
         assertFalse(inProgressUpdated.isBefore(initialUpdated));
 
         // 3. Move to RESOLVED -> resolvedAt populated
-        Incident resolved = incidentService.updateIncidentStatus(id, IncidentStatus.RESOLVED);
+        Incident resolved = incidentService.updateIncidentStatus(
+                id,
+                IncidentStatus.RESOLVED,
+                "BGP peering dampening configured and cleared",
+                RootCause.CONFIGURATION_ERROR
+        );
         assertNotNull(resolved.getResolvedAt());
         assertNull(resolved.getClosedAt());
 
@@ -536,5 +566,74 @@ class IncidentIntegrationTest extends BaseIntegrationTest {
 
         assertEquals(400, ex.getStatusCode().value());
         assertTrue(ex.getReason().contains("off-duty"));
+    }
+
+    @Test
+    @DisplayName("Verify moving incident to RESOLVED without resolution notes is blocked with HTTP 400")
+    void shouldBlockResolutionWithoutResolutionNotesInDatabase() {
+        Engineer eng = new Engineer();
+        eng.setName("Resolution Tech");
+        eng.setEmail("res.tech@test.com");
+        eng.setSpecialization("Core");
+        Engineer savedEng = engineerRepository.save(eng);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Test Resolution Notes Validation");
+        req.setDescription("Desc");
+        req.setPriority(IncidentPriority.HIGH);
+        Incident incident = incidentService.createIncident(req);
+        incidentService.assignIncident(incident.getId(), savedEng.getId());
+        incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.IN_PROGRESS);
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(incident.getId(), IncidentStatus.RESOLVED));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Resolution notes of at least 10 characters are required"));
+    }
+
+    @Test
+    @DisplayName("Verify creating and retrieving service visits in PostgreSQL database")
+    void shouldCreateAndRetrieveServiceVisitsInDatabase() {
+        Engineer eng = new Engineer();
+        eng.setName("On-site Visit Engineer");
+        eng.setEmail("visit.engineer@test.com");
+        eng.setSpecialization("Fiber");
+        Engineer savedEng = engineerRepository.save(eng);
+
+        CreateIncidentRequest req = new CreateIncidentRequest();
+        req.setTitle("Core POP Fiber Cut");
+        req.setDescription("Physical cable cut along transit route");
+        req.setPriority(IncidentPriority.CRITICAL);
+        Incident incident = incidentService.createIncident(req);
+        incidentService.assignIncident(incident.getId(), savedEng.getId());
+
+        CreateServiceVisitRequest visitReq = new CreateServiceVisitRequest();
+        visitReq.setEngineerId(savedEng.getId());
+        visitReq.setVisitDate(LocalDate.now());
+        visitReq.setCheckInAt(LocalDateTime.now().minusHours(3));
+        visitReq.setCheckOutAt(LocalDateTime.now().minusMinutes(30));
+        visitReq.setWorkNotes("Splice enclosure replaced; OTDR test passes at -18 dBm");
+        visitReq.setResolutionNotes("Fiber connection restored and signal verified");
+
+        ServiceVisitResponse visitResponse = serviceVisitService.createVisit(incident.getId(), visitReq, null);
+
+        assertNotNull(visitResponse.getId());
+        assertEquals(incident.getId(), visitResponse.getIncidentId());
+        assertEquals(savedEng.getId(), visitResponse.getEngineerId());
+        assertEquals("On-site Visit Engineer", visitResponse.getEngineerName());
+        assertEquals("Splice enclosure replaced; OTDR test passes at -18 dBm", visitResponse.getWorkNotes());
+        assertEquals("Fiber connection restored and signal verified", visitResponse.getResolutionNotes());
+
+        List<ServiceVisitResponse> visits = serviceVisitService.getVisitsForIncident(incident.getId());
+        assertEquals(1, visits.size());
+        assertEquals(visitResponse.getId(), visits.get(0).getId());
+
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM service_visits WHERE incident_id = ?",
+                Integer.class,
+                incident.getId()
+        );
+        assertEquals(1, count);
     }
 }

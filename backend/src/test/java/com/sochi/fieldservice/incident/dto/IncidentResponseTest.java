@@ -35,6 +35,8 @@ class IncidentResponseTest {
         incident.setUpdatedAt(now);
         incident.setResolvedAt(now.plusHours(1));
         incident.setClosedAt(now.plusHours(2));
+        incident.setResolutionNotes("Resolved by replacing SFP optic");
+        incident.setRootCause(com.sochi.fieldservice.incident.entity.RootCause.HARDWARE_FAILURE);
 
         // Act
         IncidentResponse response = new IncidentResponse(incident);
@@ -46,6 +48,8 @@ class IncidentResponseTest {
         assertEquals("Rahul Sharma", response.getAssignedEngineerName());
         assertEquals(deadline, response.getSlaDeadline());
         assertFalse(response.isSlaBreached());
+        assertEquals("Resolved by replacing SFP optic", response.getResolutionNotes());
+        assertEquals(com.sochi.fieldservice.incident.entity.RootCause.HARDWARE_FAILURE, response.getRootCause());
         assertEquals(now, response.getCreatedAt());
         assertEquals(now, response.getUpdatedAt());
         assertEquals(now.plusHours(1), response.getResolvedAt());

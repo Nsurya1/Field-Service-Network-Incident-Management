@@ -5,10 +5,12 @@ import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.service.EngineerService;
 import com.sochi.fieldservice.incident.dto.CreateIncidentRequest;
 import com.sochi.fieldservice.incident.dto.IncidentStatsResponse;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
+import com.sochi.fieldservice.incident.entity.RootCause;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
 import com.sochi.fieldservice.user.entity.Role;
@@ -267,13 +269,46 @@ public class IncidentService {
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus) {
-        return updateIncidentStatus(id, newStatus, null);
+        return updateIncidentStatus(id, newStatus, null, null, null);
     }
 
     @Transactional
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus,
+            String resolutionNotes,
+            RootCause rootCause) {
+        return updateIncidentStatus(id, newStatus, resolutionNotes, rootCause, null);
+    }
+
+    @Transactional
+    public Incident updateIncidentStatus(
+            Long id,
+            IncidentStatus newStatus,
+            String username) {
+        return updateIncidentStatus(id, newStatus, null, null, username);
+    }
+
+    @Transactional
+    public Incident updateIncidentStatus(
+            Long id,
+            UpdateIncidentStatusRequest request,
+            String username) {
+        return updateIncidentStatus(
+                id,
+                request.getStatus(),
+                request.getResolutionNotes(),
+                request.getRootCause(),
+                username
+        );
+    }
+
+    @Transactional
+    public Incident updateIncidentStatus(
+            Long id,
+            IncidentStatus newStatus,
+            String resolutionNotes,
+            RootCause rootCause,
             String username) {
 
         Incident incident = getIncidentById(id);
@@ -308,15 +343,36 @@ public class IncidentService {
             );
         }
 
+        if (newStatus == IncidentStatus.RESOLVED) {
+            if (resolutionNotes == null || resolutionNotes.trim().length() < 10) {
+                throw new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Resolution notes of at least 10 characters are required when resolving an incident"
+                );
+            }
+            incident.setResolutionNotes(resolutionNotes.trim());
+            if (rootCause != null) {
+                incident.setRootCause(rootCause);
+            }
+        }
+
         IncidentStatus oldStatus = incident.getStatus();
         incident.setStatus(newStatus);
 
         Incident savedIncident = incidentRepository.save(incident);
 
+        String description = String.format("Status changed from %s to %s", oldStatus, newStatus);
+        if (newStatus == IncidentStatus.RESOLVED) {
+            description += ". Resolution: " + resolutionNotes.trim();
+            if (rootCause != null) {
+                description += " [Root Cause: " + rootCause + "]";
+            }
+        }
+
         incidentHistoryRepository.save(new IncidentHistory(
                 savedIncident,
                 "STATUS_CHANGED",
-                String.format("Status changed from %s to %s", oldStatus, newStatus)
+                description
         ));
 
         return savedIncident;

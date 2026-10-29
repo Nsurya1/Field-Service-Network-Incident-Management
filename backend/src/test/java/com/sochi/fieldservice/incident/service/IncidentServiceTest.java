@@ -22,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
+import com.sochi.fieldservice.incident.entity.RootCause;
+import com.sochi.fieldservice.incident.dto.UpdateIncidentStatusRequest;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
 import com.sochi.fieldservice.incident.entity.IncidentHistory;
 import com.sochi.fieldservice.incident.repository.IncidentHistoryRepository;
@@ -172,11 +174,73 @@ class IncidentServiceTest {
         when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
         when(incidentRepository.save(any(Incident.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        Incident result = incidentService.updateIncidentStatus(1L, IncidentStatus.RESOLVED);
+        Incident result = incidentService.updateIncidentStatus(
+                1L,
+                IncidentStatus.RESOLVED,
+                "Replaced faulty SFP transponder module",
+                RootCause.HARDWARE_FAILURE
+        );
 
         assertEquals(IncidentStatus.RESOLVED, result.getStatus());
         assertNotNull(result.getResolvedAt());
         assertNull(result.getClosedAt());
+        assertEquals("Replaced faulty SFP transponder module", result.getResolutionNotes());
+        assertEquals(RootCause.HARDWARE_FAILURE, result.getRootCause());
+    }
+
+    @Test
+    void updateIncidentStatusToResolvedWithoutResolutionNotesShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(new Engineer());
+
+        when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.RESOLVED));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Resolution notes of at least 10 characters are required"));
+    }
+
+    @Test
+    void updateIncidentStatusToResolvedWithShortNotesShouldThrow400() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(new Engineer());
+
+        when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
+
+        ResponseStatusException ex = assertThrows(ResponseStatusException.class,
+                () -> incidentService.updateIncidentStatus(1L, IncidentStatus.RESOLVED, "Too short", null));
+
+        assertEquals(400, ex.getStatusCode().value());
+        assertTrue(ex.getReason().contains("Resolution notes of at least 10 characters are required"));
+    }
+
+    @Test
+    void updateIncidentStatusWithRequestDtoShouldResolveSuccessfully() {
+        Incident incident = new Incident();
+        incident.setTitle("Router failure");
+        incident.setStatus(IncidentStatus.IN_PROGRESS);
+        incident.setAssignedEngineer(new Engineer());
+
+        when(incidentRepository.findById(1L)).thenReturn(java.util.Optional.of(incident));
+        when(incidentRepository.save(any(Incident.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateIncidentStatusRequest request = new UpdateIncidentStatusRequest();
+        request.setStatus(IncidentStatus.RESOLVED);
+        request.setResolutionNotes("Configured BGP peering session correctly");
+        request.setRootCause(RootCause.CONFIGURATION_ERROR);
+
+        Incident result = incidentService.updateIncidentStatus(1L, request, null);
+
+        assertEquals(IncidentStatus.RESOLVED, result.getStatus());
+        assertNotNull(result.getResolvedAt());
+        assertEquals("Configured BGP peering session correctly", result.getResolutionNotes());
+        assertEquals(RootCause.CONFIGURATION_ERROR, result.getRootCause());
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.incident.entity.IncidentStatus;
+import com.sochi.fieldservice.incident.entity.RootCause;
 
 import java.time.LocalDateTime;
 
@@ -20,6 +21,8 @@ public class IncidentResponse {
     private LocalDateTime slaDeadline;
     private boolean slaBreached;
     private Long version;
+    private String resolutionNotes;
+    private RootCause rootCause;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private LocalDateTime resolvedAt;
@@ -35,6 +38,8 @@ public class IncidentResponse {
         this.slaDeadline = incident.getSlaDeadline();
         this.slaBreached = incident.isSlaBreached();
         this.version = incident.getVersion();
+        this.resolutionNotes = incident.getResolutionNotes();
+        this.rootCause = incident.getRootCause();
         this.createdAt = incident.getCreatedAt();
         this.updatedAt = incident.getUpdatedAt();
         this.resolvedAt = incident.getResolvedAt();
@@ -90,6 +95,14 @@ public class IncidentResponse {
 
     public Long getVersion() {
         return version;
+    }
+
+    public String getResolutionNotes() {
+        return resolutionNotes;
+    }
+
+    public RootCause getRootCause() {
+        return rootCause;
     }
 
     public LocalDateTime getCreatedAt() {

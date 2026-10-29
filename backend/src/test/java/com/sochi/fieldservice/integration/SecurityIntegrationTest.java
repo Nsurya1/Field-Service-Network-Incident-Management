@@ -484,4 +484,102 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.active").value(false));
     }
+
+    @Test
+    @DisplayName("Verify service visit RBAC: ADMIN/MANAGER/assigned ENGINEER allowed, VIEWER and peer ENGINEER forbidden")
+    void shouldEnforceRbacOnServiceVisitsEndpoints() throws Exception {
+        Engineer eng1 = new Engineer();
+        eng1.setName("Eng One Visit");
+        eng1.setEmail("eng1.visit@test.com");
+        eng1.setSpecialization("Optical");
+        eng1 = engineerRepository.save(eng1);
+
+        Engineer eng2 = new Engineer();
+        eng2.setName("Eng Two Visit");
+        eng2.setEmail("eng2.visit@test.com");
+        eng2.setSpecialization("Core");
+        eng2 = engineerRepository.save(eng2);
+
+        User userEng1 = new User("user_eng1_visit", "eng1_v@test.com", "pass", Role.ROLE_ENGINEER);
+        userEng1.setEngineer(eng1);
+        userEng1 = userRepository.save(userEng1);
+
+        User userEng2 = new User("user_eng2_visit", "eng2_v@test.com", "pass", Role.ROLE_ENGINEER);
+        userEng2.setEngineer(eng2);
+        userEng2 = userRepository.save(userEng2);
+
+        User manager = userRepository.save(new User("manager_visit", "manager_v@test.com", "pass", Role.ROLE_MANAGER));
+        User viewer = userRepository.save(new User("viewer_visit", "viewer_v@test.com", "pass", Role.ROLE_VIEWER));
+
+        String tokenEng1 = "Bearer " + jwtUtils.generateToken(userEng1);
+        String tokenEng2 = "Bearer " + jwtUtils.generateToken(userEng2);
+        String tokenManager = "Bearer " + jwtUtils.generateToken(manager);
+        String tokenViewer = "Bearer " + jwtUtils.generateToken(viewer);
+
+        Incident incident = new Incident();
+        incident.setTitle("Visit security test ticket");
+        incident.setDescription("Desc");
+        incident.setPriority(IncidentPriority.HIGH);
+        incident.setStatus(IncidentStatus.ASSIGNED);
+        incident.setAssignedEngineer(eng1);
+        Incident savedInc = incidentRepository.save(incident);
+
+        String visitPayload = """
+            {
+                "visitDate": "2026-10-29",
+                "workNotes": "On-site optical inspection completed"
+            }
+            """;
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(visitPayload))
+                .andExpect(status().isUnauthorized());
+
+        // 2. VIEWER -> 403
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .header("Authorization", tokenViewer)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(visitPayload))
+                .andExpect(status().isForbidden());
+
+        // 3. Peer ENGINEER (eng2) on eng1's incident -> 403 Forbidden
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .header("Authorization", tokenEng2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(visitPayload))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("Engineers can only log service visits on incidents assigned to them"));
+
+        // 4. Assigned ENGINEER (eng1) -> 201 Created
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .header("Authorization", tokenEng1)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(visitPayload))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.incidentId").value(savedInc.getId()))
+                .andExpect(jsonPath("$.engineerId").value(eng1.getId()))
+                .andExpect(jsonPath("$.workNotes").value("On-site optical inspection completed"));
+
+        // 5. MANAGER -> 201 Created
+        mockMvc.perform(post("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .header("Authorization", tokenManager)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "visitDate": "2026-10-29",
+                                "workNotes": "Manager supervisory inspection"
+                            }
+                            """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.workNotes").value("Manager supervisory inspection"));
+
+        // 6. GET visits -> VIEWER allowed to view (200 OK)
+        mockMvc.perform(get("/api/v1/incidents/" + savedInc.getId() + "/visits")
+                        .header("Authorization", tokenViewer))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2));
+    }
 }

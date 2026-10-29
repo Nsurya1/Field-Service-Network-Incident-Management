@@ -45,6 +45,13 @@ public class Incident {
     @Column(name = "closed_at")
     private LocalDateTime closedAt;
 
+    @Column(name = "resolution_notes", columnDefinition = "TEXT")
+    private String resolutionNotes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "root_cause", length = 50)
+    private RootCause rootCause;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assigned_engineer_id")
     private Engineer assignedEngineer;
@@ -222,5 +229,21 @@ public class Incident {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public String getResolutionNotes() {
+        return resolutionNotes;
+    }
+
+    public void setResolutionNotes(String resolutionNotes) {
+        this.resolutionNotes = resolutionNotes;
+    }
+
+    public RootCause getRootCause() {
+        return rootCause;
+    }
+
+    public void setRootCause(RootCause rootCause) {
+        this.rootCause = rootCause;
     }
 }

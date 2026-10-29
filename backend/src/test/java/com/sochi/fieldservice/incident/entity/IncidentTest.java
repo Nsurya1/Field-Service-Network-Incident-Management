@@ -227,4 +227,18 @@ class IncidentTest {
         incident.setVersion(3L);
         assertEquals(3L, incident.getVersion());
     }
+
+    @Test
+    @DisplayName("Verify resolutionNotes and rootCause getters and setters")
+    void shouldSupportResolutionNotesAndRootCause() {
+        Incident incident = new Incident();
+        assertNull(incident.getResolutionNotes());
+        assertNull(incident.getRootCause());
+
+        incident.setResolutionNotes("Replaced primary fuse on power distribution unit");
+        incident.setRootCause(RootCause.POWER_OUTAGE);
+
+        assertEquals("Replaced primary fuse on power distribution unit", incident.getResolutionNotes());
+        assertEquals(RootCause.POWER_OUTAGE, incident.getRootCause());
+    }
 }
