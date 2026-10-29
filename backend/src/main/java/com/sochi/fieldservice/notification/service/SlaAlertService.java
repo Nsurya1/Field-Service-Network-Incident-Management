@@ -6,6 +6,7 @@ import com.sochi.fieldservice.incident.repository.IncidentRepository;
 import com.sochi.fieldservice.notification.entity.Notification;
 import com.sochi.fieldservice.notification.entity.NotificationType;
 import com.sochi.fieldservice.notification.repository.NotificationRepository;
+import com.sochi.fieldservice.observability.BusinessMetricsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,13 +28,16 @@ public class SlaAlertService {
     private final IncidentRepository incidentRepository;
     private final NotificationRepository notificationRepository;
     private final Clock clock;
+    private final BusinessMetricsService businessMetricsService;
 
     public SlaAlertService(IncidentRepository incidentRepository,
                            NotificationRepository notificationRepository,
-                           Clock clock) {
+                           Clock clock,
+                           BusinessMetricsService businessMetricsService) {
         this.incidentRepository = incidentRepository;
         this.notificationRepository = notificationRepository;
         this.clock = clock;
+        this.businessMetricsService = businessMetricsService;
     }
 
     @Transactional
@@ -61,7 +65,11 @@ public class SlaAlertService {
                     String message = String.format("Incident #%d '%s' [%s] has BREACHED its SLA deadline (%s).",
                             incident.getId(), incident.getTitle(), incident.getPriority(), slaDeadline.format(DATE_TIME_FORMATTER));
                     Notification notification = new Notification(incident, NotificationType.BREACHED, message, now);
-                    createdNotifications.add(notificationRepository.save(notification));
+                    Notification saved = notificationRepository.save(notification);
+                    createdNotifications.add(saved);
+                    if (businessMetricsService != null) {
+                        businessMetricsService.recordSlaAlertGenerated(NotificationType.BREACHED);
+                    }
                     log.warn("Generated SLA BREACHED alert for incident #{}", incident.getId());
                 }
             } else {
@@ -73,7 +81,11 @@ public class SlaAlertService {
                             String message = String.format("Incident #%d '%s' [%s] has reached 80%% of SLA window. Deadline: %s.",
                                     incident.getId(), incident.getTitle(), incident.getPriority(), slaDeadline.format(DATE_TIME_FORMATTER));
                             Notification notification = new Notification(incident, NotificationType.WARNING, message, now);
-                            createdNotifications.add(notificationRepository.save(notification));
+                            Notification saved = notificationRepository.save(notification);
+                            createdNotifications.add(saved);
+                            if (businessMetricsService != null) {
+                                businessMetricsService.recordSlaAlertGenerated(NotificationType.WARNING);
+                            }
                             log.info("Generated SLA WARNING alert for incident #{}", incident.getId());
                         }
                     }

@@ -34,6 +34,9 @@ class SlaAlertServiceTest {
     @Mock
     private NotificationRepository notificationRepository;
 
+    @Mock
+    private com.sochi.fieldservice.observability.BusinessMetricsService businessMetricsService;
+
     private Clock fixedClock;
     private SlaAlertService slaAlertService;
 
@@ -43,7 +46,7 @@ class SlaAlertServiceTest {
     void setUp() {
         Instant fixedInstant = fixedNow.atZone(ZoneId.systemDefault()).toInstant();
         fixedClock = Clock.fixed(fixedInstant, ZoneId.systemDefault());
-        slaAlertService = new SlaAlertService(incidentRepository, notificationRepository, fixedClock);
+        slaAlertService = new SlaAlertService(incidentRepository, notificationRepository, fixedClock, businessMetricsService);
     }
 
     @Test

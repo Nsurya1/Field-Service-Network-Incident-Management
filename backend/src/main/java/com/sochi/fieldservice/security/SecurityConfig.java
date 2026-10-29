@@ -80,11 +80,14 @@ public class SecurityConfig {
                                 "/api/v1/auth/**",
                                 "/api/v1/health",
                                 "/api/v1",
-                                "/api/v1/database-check"
+                                "/api/v1/database-check",
+                                "/actuator/health",
+                                "/actuator/health/**",
+                                "/actuator/info"
                         ).permitAll()
 
                         // Admin endpoints
-                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/**", "/actuator/**").hasRole("ADMIN")
 
                         // Engineer management permissions
                         .requestMatchers(HttpMethod.POST, "/api/v1/engineers").hasRole("ADMIN")

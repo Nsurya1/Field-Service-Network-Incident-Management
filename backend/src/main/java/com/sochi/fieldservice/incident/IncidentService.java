@@ -25,6 +25,7 @@ import com.sochi.fieldservice.user.entity.Role;
 import com.sochi.fieldservice.user.entity.User;
 import com.sochi.fieldservice.user.repository.UserRepository;
 import com.sochi.fieldservice.visit.repository.ServiceVisitRepository;
+import com.sochi.fieldservice.observability.BusinessMetricsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.sochi.fieldservice.config.CacheConfig;
@@ -50,6 +51,7 @@ public class IncidentService {
     private final UserRepository userRepository;
     private final IncidentCommentRepository incidentCommentRepository;
     private final ServiceVisitRepository serviceVisitRepository;
+    private final BusinessMetricsService businessMetricsService;
     private static final Logger logger = LoggerFactory.getLogger(IncidentService.class);
 
     public IncidentService(
@@ -58,13 +60,15 @@ public class IncidentService {
             IncidentHistoryRepository incidentHistoryRepository,
             UserRepository userRepository,
             IncidentCommentRepository incidentCommentRepository,
-            ServiceVisitRepository serviceVisitRepository) {
+            ServiceVisitRepository serviceVisitRepository,
+            BusinessMetricsService businessMetricsService) {
         this.incidentRepository = incidentRepository;
         this.engineerService = engineerService;
         this.incidentHistoryRepository = incidentHistoryRepository;
         this.userRepository = userRepository;
         this.incidentCommentRepository = incidentCommentRepository;
         this.serviceVisitRepository = serviceVisitRepository;
+        this.businessMetricsService = businessMetricsService;
     }
 
     @Transactional
@@ -93,6 +97,10 @@ public class IncidentService {
         Incident savedIncident = incidentRepository.save(incident);
 
         logger.info("Incident created successfully with ID: {}", savedIncident.getId());
+
+        if (businessMetricsService != null) {
+            businessMetricsService.recordIncidentCreated(savedIncident.getPriority());
+        }
 
         incidentHistoryRepository.save(new IncidentHistory(
                 savedIncident,
@@ -449,6 +457,10 @@ public class IncidentService {
         incident.setStatus(newStatus);
 
         Incident savedIncident = incidentRepository.save(incident);
+
+        if (newStatus == IncidentStatus.RESOLVED && oldStatus != IncidentStatus.RESOLVED && businessMetricsService != null) {
+            businessMetricsService.recordIncidentResolved(savedIncident.getPriority());
+        }
 
         String description = String.format("Status changed from %s to %s", oldStatus, newStatus);
         if (newStatus == IncidentStatus.RESOLVED) {

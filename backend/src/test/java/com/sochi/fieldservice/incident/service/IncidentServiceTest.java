@@ -73,6 +73,9 @@ class IncidentServiceTest {
     @Mock
     private ServiceVisitRepository serviceVisitRepository;
 
+    @Mock
+    private com.sochi.fieldservice.observability.BusinessMetricsService businessMetricsService;
+
     @InjectMocks
     private IncidentService incidentService;
 
