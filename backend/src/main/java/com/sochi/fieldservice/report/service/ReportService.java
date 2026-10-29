@@ -1,11 +1,13 @@
 package com.sochi.fieldservice.report.service;
 
+import com.sochi.fieldservice.config.CacheConfig;
 import com.sochi.fieldservice.incident.entity.Incident;
 import com.sochi.fieldservice.incident.entity.IncidentPriority;
 import com.sochi.fieldservice.report.dto.DailyIncidentSeriesResponse;
 import com.sochi.fieldservice.report.dto.EngineerPerformanceResponse;
 import com.sochi.fieldservice.report.dto.ReportSummaryResponse;
 import com.sochi.fieldservice.report.repository.*;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,7 @@ public class ReportService {
         this.reportRepository = reportRepository;
     }
 
+    @Cacheable(value = CacheConfig.CACHE_REPORT_SUMMARY, key = "{#from != null ? #from.toString() : 'default_from', #to != null ? #to.toString() : 'default_to'}")
     public ReportSummaryResponse getReportSummary(LocalDateTime from, LocalDateTime to) {
         LocalDateTime effectiveFrom = from != null ? from : LocalDateTime.now().minusDays(30);
         LocalDateTime effectiveTo = to != null ? to : LocalDateTime.now();

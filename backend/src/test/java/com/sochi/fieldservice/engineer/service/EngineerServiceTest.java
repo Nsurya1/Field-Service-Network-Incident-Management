@@ -6,6 +6,7 @@ import com.sochi.fieldservice.engineer.dto.UpdateEngineerRequest;
 import com.sochi.fieldservice.engineer.entity.AvailabilityStatus;
 import com.sochi.fieldservice.engineer.entity.Engineer;
 import com.sochi.fieldservice.engineer.repository.EngineerRepository;
+import com.sochi.fieldservice.incident.repository.EngineerWorkloadProjection;
 import com.sochi.fieldservice.incident.repository.IncidentRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -101,8 +102,13 @@ class EngineerServiceTest {
         engineer2.setSpecialization("Hardware");
 
         when(engineerRepository.findAll()).thenReturn(List.of(engineer1, engineer2));
-        when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(1L), anyList())).thenReturn(2L);
-        when(incidentRepository.countByAssignedEngineerIdAndStatusIn(eq(2L), anyList())).thenReturn(0L);
+        EngineerWorkloadProjection p1 = new EngineerWorkloadProjection() {
+            @Override
+            public Long getEngineerId() { return 1L; }
+            @Override
+            public Long getActiveCount() { return 2L; }
+        };
+        when(incidentRepository.countActiveIncidentsByEngineer(anyList())).thenReturn(List.of(p1));
 
         List<EngineerResponse> engineers = engineerService.getAllEngineers();
 

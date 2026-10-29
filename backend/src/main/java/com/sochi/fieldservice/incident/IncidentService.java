@@ -27,6 +27,9 @@ import com.sochi.fieldservice.user.repository.UserRepository;
 import com.sochi.fieldservice.visit.repository.ServiceVisitRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.sochi.fieldservice.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -65,11 +68,13 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident createIncident(CreateIncidentRequest request) {
         return createIncident(request, null);
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident createIncident(CreateIncidentRequest request, String username) {
         Incident incident = new Incident();
 
@@ -112,11 +117,13 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident assignIncident(Long incidentId, Long engineerId) {
         return assignIncident(incidentId, engineerId, null);
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident assignIncident(Long incidentId, Long engineerId, String username) {
         Incident incident = getIncidentById(incidentId);
 
@@ -175,11 +182,13 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident unassignIncident(Long incidentId) {
         return unassignIncident(incidentId, null);
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident unassignIncident(Long incidentId, String username) {
         Incident incident = getIncidentById(incidentId);
 
@@ -212,11 +221,13 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncident(Long id, UpdateIncidentRequest request) {
         return updateIncident(id, request, null);
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncident(Long id, UpdateIncidentRequest request, String username) {
         if (username != null) {
             User user = userRepository.findByUsername(username).orElse(null);
@@ -339,6 +350,7 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus) {
@@ -346,6 +358,7 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus,
@@ -355,6 +368,7 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus,
@@ -363,6 +377,7 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncidentStatus(
             Long id,
             UpdateIncidentStatusRequest request,
@@ -377,6 +392,7 @@ public class IncidentService {
     }
 
     @Transactional
+    @CacheEvict(value = {CacheConfig.CACHE_INCIDENT_STATS, CacheConfig.CACHE_ENGINEER_LIST, CacheConfig.CACHE_AVAILABLE_ENGINEERS, CacheConfig.CACHE_REPORT_SUMMARY}, allEntries = true)
     public Incident updateIncidentStatus(
             Long id,
             IncidentStatus newStatus,
@@ -540,6 +556,7 @@ public class IncidentService {
         return incidentHistoryRepository.findByIncidentIdOrderByTimestampAsc(incidentId);
     }
 
+    @Cacheable(value = CacheConfig.CACHE_INCIDENT_STATS, key = "'summary'")
     public IncidentStatsResponse getIncidentStats() {
         long total = incidentRepository.count();
         long open = incidentRepository.countByStatus(IncidentStatus.OPEN);
