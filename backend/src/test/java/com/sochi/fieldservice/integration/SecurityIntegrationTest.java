@@ -810,4 +810,37 @@ class SecurityIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalIncidents").exists());
     }
+
+    @Test
+    @DisplayName("Verify RBAC and authentication on notification endpoints")
+    void shouldEnforceRbacOnNotificationEndpoints() throws Exception {
+        User admin = userRepository.save(new User("notif_admin", "notif_admin@example.com", "pass", Role.ROLE_ADMIN));
+        User eng = userRepository.save(new User("notif_eng", "notif_eng@example.com", "pass", Role.ROLE_ENGINEER));
+
+        String adminToken = "Bearer " + jwtUtils.generateToken(admin);
+        String engToken = "Bearer " + jwtUtils.generateToken(eng);
+
+        // 1. Unauthenticated -> 401
+        mockMvc.perform(get("/api/v1/notifications"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(patch("/api/v1/notifications/read-all"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. ENGINEER -> 200 OK
+        mockMvc.perform(get("/api/v1/notifications").header("Authorization", engToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/notifications/unread-count").header("Authorization", engToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.unreadCount").exists());
+
+        // 3. ADMIN -> 200 OK
+        mockMvc.perform(patch("/api/v1/notifications/read-all").header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.markedAsRead").exists());
+    }
 }

@@ -15,4 +15,7 @@ public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSp
     long countByStatus(IncidentStatus status);
 
     long countByStatusInAndSlaDeadlineBefore(List<IncidentStatus> statuses, LocalDateTime dateTime);
+
+    @org.springframework.data.jpa.repository.Query("SELECT i FROM Incident i LEFT JOIN FETCH i.assignedEngineer WHERE i.status IN :statuses")
+    List<Incident> findActiveIncidentsWithEngineer(@org.springframework.data.repository.query.Param("statuses") List<IncidentStatus> statuses);
 }

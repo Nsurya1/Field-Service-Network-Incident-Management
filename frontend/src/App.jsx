@@ -102,6 +102,18 @@ function IncidentDashboard() {
     setPage(0);
   };
 
+  const handleOpenIncidentById = async (id) => {
+    try {
+      setActiveTab('incidents');
+      const incident = await incidentService.getIncidentById(id);
+      if (incident) {
+        setDetailIncident(incident);
+      }
+    } catch (err) {
+      console.error('Failed to open incident from notification', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Navbar
@@ -109,6 +121,7 @@ function IncidentDashboard() {
         onOpenEngineers={() => setIsEngineersOpen(true)}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        onSelectIncident={handleOpenIncidentById}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">

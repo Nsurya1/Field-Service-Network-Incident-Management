@@ -105,6 +105,9 @@ public class SecurityConfig {
                         // Reports and analytics permissions
                         .requestMatchers("/api/v1/reports/**").hasAnyRole("ADMIN", "MANAGER", "VIEWER")
 
+                        // Notifications permissions
+                        .requestMatchers("/api/v1/notifications/**").hasAnyRole("ADMIN", "MANAGER", "ENGINEER", "VIEWER")
+
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())
