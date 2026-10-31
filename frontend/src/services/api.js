@@ -24,8 +24,8 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Avoid redirecting if the 401 occurred on the login endpoint itself
-      if (!error.config.url.includes('/auth/login')) {
+      // Avoid redirecting if the 401 occurred on auth endpoints (login, register)
+      if (!error.config.url.includes('/auth/')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.reload();

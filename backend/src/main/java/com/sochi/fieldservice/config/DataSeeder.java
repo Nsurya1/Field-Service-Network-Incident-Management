@@ -14,6 +14,7 @@ import com.sochi.fieldservice.user.entity.User;
 import com.sochi.fieldservice.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
@@ -47,6 +48,7 @@ public class DataSeeder implements CommandLineRunner {
     @Value("${app.seed.default-password:password123}")
     private String defaultPassword = "password123";
 
+    @Autowired
     public DataSeeder(UserRepository userRepository,
                       EngineerRepository engineerRepository,
                       IncidentRepository incidentRepository,
