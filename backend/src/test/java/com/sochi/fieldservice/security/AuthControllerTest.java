@@ -125,4 +125,40 @@ class AuthControllerTest {
                             """))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void shouldHandleForgotPasswordSuccessfully() throws Exception {
+        when(authService.forgotPassword(any())).thenReturn(
+                new com.sochi.fieldservice.security.dto.ForgotPasswordResponse("Code generated", "TOKEN123")
+        );
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "usernameOrEmail": "diana"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Code generated"))
+                .andExpect(jsonPath("$.resetToken").value("TOKEN123"));
+    }
+
+    @Test
+    void shouldHandleResetPasswordSuccessfully() throws Exception {
+        when(authService.resetPassword(any())).thenReturn(
+                new com.sochi.fieldservice.security.dto.MessageResponse("Password reset successfully")
+        );
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                                "resetToken": "TOKEN123",
+                                "newPassword": "newPassword123"
+                            }
+                            """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Password reset successfully"));
+    }
 }

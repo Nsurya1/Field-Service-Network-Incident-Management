@@ -56,4 +56,44 @@ class AuthDtoTest {
         assertEquals("bob@example.com", res2.getEmail());
         assertEquals("ROLE_MANAGER", res2.getRole());
     }
+
+    @Test
+    void shouldSupportForgotPasswordDtos() {
+        ForgotPasswordRequest req = new ForgotPasswordRequest("john");
+        assertEquals("john", req.getUsernameOrEmail());
+
+        ForgotPasswordRequest req2 = new ForgotPasswordRequest();
+        req2.setUsernameOrEmail("john@example.com");
+        assertEquals("john@example.com", req2.getUsernameOrEmail());
+
+        ForgotPasswordResponse res = new ForgotPasswordResponse("Reset sent", "TOKEN123");
+        assertEquals("Reset sent", res.getMessage());
+        assertEquals("TOKEN123", res.getResetToken());
+
+        ForgotPasswordResponse res2 = new ForgotPasswordResponse();
+        res2.setMessage("msg");
+        res2.setResetToken("tok");
+        assertEquals("msg", res2.getMessage());
+        assertEquals("tok", res2.getResetToken());
+    }
+
+    @Test
+    void shouldSupportResetPasswordDtos() {
+        ResetPasswordRequest req = new ResetPasswordRequest("TOKEN", "pass123");
+        assertEquals("TOKEN", req.getResetToken());
+        assertEquals("pass123", req.getNewPassword());
+
+        ResetPasswordRequest req2 = new ResetPasswordRequest();
+        req2.setResetToken("TOKEN2");
+        req2.setNewPassword("pass456");
+        assertEquals("TOKEN2", req2.getResetToken());
+        assertEquals("pass456", req2.getNewPassword());
+
+        MessageResponse msg = new MessageResponse("Success");
+        assertEquals("Success", msg.getMessage());
+
+        MessageResponse msg2 = new MessageResponse();
+        msg2.setMessage("Updated");
+        assertEquals("Updated", msg2.getMessage());
+    }
 }

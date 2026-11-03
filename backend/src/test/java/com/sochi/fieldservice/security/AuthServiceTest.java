@@ -1,8 +1,14 @@
 package com.sochi.fieldservice.security;
 
+import com.sochi.fieldservice.engineer.entity.Engineer;
+import com.sochi.fieldservice.engineer.repository.EngineerRepository;
 import com.sochi.fieldservice.security.dto.AuthResponse;
+import com.sochi.fieldservice.security.dto.ForgotPasswordRequest;
+import com.sochi.fieldservice.security.dto.ForgotPasswordResponse;
 import com.sochi.fieldservice.security.dto.LoginRequest;
+import com.sochi.fieldservice.security.dto.MessageResponse;
 import com.sochi.fieldservice.security.dto.RegisterRequest;
+import com.sochi.fieldservice.security.dto.ResetPasswordRequest;
 import com.sochi.fieldservice.security.jwt.JwtUtils;
 import com.sochi.fieldservice.user.entity.Role;
 import com.sochi.fieldservice.user.entity.User;
@@ -38,6 +44,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtUtils jwtUtils;
+
+    @Mock
+    private EngineerRepository engineerRepository;
 
     @InjectMocks
     private AuthService authService;
@@ -131,5 +140,61 @@ class AuthServiceTest {
 
         assertEquals(401, ex.getStatusCode().value());
         assertTrue(ex.getReason().contains("Invalid username or password"));
+    }
+
+    @Test
+    void forgotPasswordShouldGenerateTokenForValidUser() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("diana");
+        User user = new User("diana", "diana@example.com", "hash", Role.ROLE_ADMIN);
+
+        when(userRepository.findByUsername("diana")).thenReturn(java.util.Optional.of(user));
+
+        ForgotPasswordResponse response = authService.forgotPassword(request);
+
+        assertNotNull(response);
+        assertNotNull(response.getResetToken());
+        assertTrue(response.getMessage().contains("generated"));
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void forgotPasswordShouldThrow404WhenUserNotFound() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("nonexistent");
+
+        when(userRepository.findByUsername("nonexistent")).thenReturn(java.util.Optional.empty());
+        when(userRepository.findByEmail("nonexistent")).thenReturn(java.util.Optional.empty());
+
+        assertThrows(ResponseStatusException.class, () -> authService.forgotPassword(request));
+    }
+
+    @Test
+    void resetPasswordShouldUpdatePasswordWhenTokenValid() {
+        ResetPasswordRequest request = new ResetPasswordRequest("RESET123", "newPassword123");
+        User user = new User("diana", "diana@example.com", "hash", Role.ROLE_ADMIN);
+        user.setResetToken("RESET123");
+        user.setResetTokenExpiry(java.time.LocalDateTime.now().plusMinutes(10));
+
+        when(userRepository.findByResetToken("RESET123")).thenReturn(java.util.Optional.of(user));
+        when(passwordEncoder.encode("newPassword123")).thenReturn("newHashed");
+
+        MessageResponse response = authService.resetPassword(request);
+
+        assertNotNull(response);
+        assertEquals("newHashed", user.getPassword());
+        assertNull(user.getResetToken());
+        assertNull(user.getResetTokenExpiry());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void resetPasswordShouldThrow400WhenTokenExpiredOrInvalid() {
+        ResetPasswordRequest request = new ResetPasswordRequest("EXPIRED", "newPassword123");
+        User user = new User("diana", "diana@example.com", "hash", Role.ROLE_ADMIN);
+        user.setResetToken("EXPIRED");
+        user.setResetTokenExpiry(java.time.LocalDateTime.now().minusMinutes(5));
+
+        when(userRepository.findByResetToken("EXPIRED")).thenReturn(java.util.Optional.of(user));
+
+        assertThrows(ResponseStatusException.class, () -> authService.resetPassword(request));
     }
 }

@@ -51,6 +51,8 @@ class UserTest {
         LocalDateTime now = LocalDateTime.now();
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
+        user.setResetToken("RESET_CODE");
+        user.setResetTokenExpiry(now.plusHours(1));
 
         assertEquals(10L, user.getId());
         assertEquals("alice", user.getUsername());
@@ -60,6 +62,8 @@ class UserTest {
         assertFalse(user.isEnabled());
         assertEquals(now, user.getCreatedAt());
         assertEquals(now, user.getUpdatedAt());
+        assertEquals("RESET_CODE", user.getResetToken());
+        assertEquals(now.plusHours(1), user.getResetTokenExpiry());
     }
 
     @Test

@@ -15,7 +15,7 @@ import AuthView from './components/AuthView';
 import { Filter, RefreshCw, AlertCircle, Search, AlertTriangle } from 'lucide-react';
 
 function IncidentDashboard() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [activeTab, setActiveTab] = useState('incidents');
 
   // State
@@ -129,6 +129,18 @@ function IncidentDashboard() {
           <ReportsPage />
         ) : (
           <>
+            {/* Technician Context Banner */}
+            {hasRole('ROLE_ENGINEER') && !hasRole('ROLE_ADMIN', 'ROLE_MANAGER') && (
+              <div className="mb-4 px-4 py-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-900 flex items-center justify-between shadow-xs">
+                <div className="flex items-center space-x-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-indigo-600 animate-pulse"></span>
+                  <span className="font-semibold">Technician View:</span>
+                  <span className="text-indigo-700">Displaying incidents assigned to your profile ({user?.username}).</span>
+                </div>
+                <span className="text-[11px] font-mono bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md font-medium">ROLE_ENGINEER</span>
+              </div>
+            )}
+
             {/* Metric widgets */}
             <StatsDashboard stats={stats} loading={statsLoading} />
 

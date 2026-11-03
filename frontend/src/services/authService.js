@@ -23,6 +23,16 @@ export const authService = {
     return response.data;
   },
 
+  async forgotPassword(usernameOrEmail) {
+    const response = await api.post('/auth/forgot-password', { usernameOrEmail });
+    return response.data;
+  },
+
+  async resetPassword(resetToken, newPassword) {
+    const response = await api.post('/auth/reset-password', { resetToken, newPassword });
+    return response.data;
+  },
+
   logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
