@@ -1,7 +1,17 @@
 import axios from 'axios';
 
+// Automatically normalize baseURL to ensure /api/v1 is present
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL;
+let resolvedBaseUrl = '/api/v1';
+
+if (rawBaseUrl && rawBaseUrl.trim() !== '') {
+  const clean = rawBaseUrl.trim().replace(/\/+$/, '');
+  resolvedBaseUrl = clean.endsWith('/api/v1') ? clean : `${clean}/api/v1`;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
+  baseURL: resolvedBaseUrl,
+  timeout: 45000, // 45s timeout to handle Render cold starts gracefully without hanging forever
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,7 +35,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response && error.response.status === 401) {
       // Avoid redirecting if the 401 occurred on auth endpoints (login, register)
-      if (!error.config.url.includes('/auth/')) {
+      if (!error.config?.url?.includes('/auth/')) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.reload();

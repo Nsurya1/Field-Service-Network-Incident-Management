@@ -42,10 +42,17 @@ export default function AuthView() {
         await login(formData.username, formData.password);
       }
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-        (tab === 'register' ? 'Registration failed. Try another username/email.' : 'Invalid credentials. Please verify username and password.')
-      );
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setError('Server is waking up (Render free tier cold start). Please wait 30 seconds and try again.');
+      } else if (err.message?.includes('Network Error')) {
+        setError('Cannot connect to backend. Please verify your Render service is Live and VITE_API_BASE_URL is set in Vercel.');
+      } else {
+        setError(
+          err.response?.data?.message ||
+          err.message ||
+          (tab === 'register' ? 'Registration failed. Try another username/email.' : 'Invalid credentials. Please verify username and password.')
+        );
+      }
     } finally {
       setLoading(false);
     }
