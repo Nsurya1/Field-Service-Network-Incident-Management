@@ -15,11 +15,12 @@ export const authService = {
     return response.data;
   },
 
-  async register(username, email, password) {
+  async register(username, email, password, role = 'ROLE_ENGINEER') {
     const response = await api.post('/auth/register', {
       username,
       email,
       password,
+      role,
     });
     if (!response.data || typeof response.data !== 'object' || !response.data.token) {
       throw new Error(

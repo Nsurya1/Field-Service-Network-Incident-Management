@@ -70,6 +70,9 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already in use: " + email);
         }
 
+        // Public self-registration always assigns ROLE_ENGINEER for security against privilege escalation
+        Role assignedRole = Role.ROLE_ENGINEER;
+
         Engineer savedEngineer = null;
         if (engineerRepository != null) {
             Engineer engineer = new Engineer();
@@ -86,7 +89,7 @@ public class AuthService {
                 username,
                 email,
                 passwordEncoder.encode(request.getPassword()),
-                Role.ROLE_ENGINEER,
+                assignedRole,
                 savedEngineer
         );
 
